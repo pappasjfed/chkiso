@@ -63,7 +63,7 @@ function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     if ($IsDrive) {
         Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
-        $devicePath = "\\.\$DriveLetter`:"
+        $devicePath = "\\.\${DriveLetter}:"
         $sha = [System.Security.Cryptography.SHA256]::Create()
         try {
             $stream = [System.IO.File]::OpenRead($devicePath)
@@ -185,7 +185,7 @@ function Invoke-ImplantedMd5Check {
     $PVD_OFFSET = 32768; $PVD_SIZE = 2048; $APP_USE_OFFSET_IN_PVD = 883; $APP_USE_SIZE = 512; $SECTOR_SIZE = 2048
     $fileStream = $null; $md5 = $null
     try {
-        $streamPath = if ($IsDrive) { "\\.\$DriveLetter`:" } else { $Path }
+        $streamPath = if ($IsDrive) { "\\.\${DriveLetter}:" } else { $Path }
         $fileStream = [System.IO.File]::OpenRead($streamPath)
         $fileLength = $fileStream.Length
 
