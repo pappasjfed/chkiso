@@ -207,7 +207,9 @@ function Invoke-ImplantedMd5Check {
         $skipSectors = 0; $skipMatch = [regex]::Match($appUseString, 'SKIPSECTORS\s*=\s*(\d+)'); if ($skipMatch.Success) { $skipSectors = [int]$skipMatch.Groups[1].Value }
         $hashEndOffset = $fileLength - ($skipSectors * $SECTOR_SIZE)
         $implantDataLength = $APP_USE_SIZE  # Clear entire 512-byte Application Use field
-        $neutralizedPvd = $pvdBlock.Clone(); [System.Array]::Clear($neutralizedPvd, $APP_USE_OFFSET_IN_PVD, $implantDataLength)
+        $neutralizedPvd = $pvdBlock.Clone()
+        # Fill with spaces (0x20), not zeros - this matches libcheckisomd5 behavior
+        for ($i = 0; $i -lt $implantDataLength; $i++) { $neutralizedPvd[$APP_USE_OFFSET_IN_PVD + $i] = 0x20 }
 
         $fileStream.Seek(0, [System.IO.SeekOrigin]::Begin) | Out-Null; $buffer = New-Object byte[] 65536
         # Part A
