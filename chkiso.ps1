@@ -282,22 +282,26 @@ if ($PSBoundParameters.ContainsKey('VerifyContents')) {
 
 if ($PSBoundParameters.ContainsKey('Dismount')) {
     if ($isDrive) {
-        # Only eject if this is the drive letter passed in as the Path parameter
+        # Eject the drive letter that was explicitly passed in as the Path parameter
+        # This is safe because the user explicitly specified this drive
         try {
             Write-Host "`nEjecting drive $driveLetter`:" -ForegroundColor Yellow
             $shell = New-Object -ComObject Shell.Application
             $shell.Namespace(17).ParseName($driveLetter + ":").InvokeVerb("Eject")
         } catch { Write-Error "Failed to eject drive $driveLetter`: . $_" }
     } else {
-        # For ISO files, only dismount if we actually mounted it or if it's currently attached
-        $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
-        if ($diskImage -and $diskImage.Attached) {
-            if ($script:mountedDriveLetter) {
+        # For ISO files, only dismount if we actually mounted it during this script execution
+        # This prevents dismounting ISOs that were already mounted before running this script
+        if ($script:mountedDriveLetter) {
+            $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
+            if ($diskImage -and $diskImage.Attached) {
                 Write-Host "`nDismounting ISO from drive $script:mountedDriveLetter`:..." -ForegroundColor Yellow
+                Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
             } else {
-                Write-Host "`nDismounting ISO..." -ForegroundColor Yellow
+                Write-Warning "ISO is not currently mounted."
             }
-            Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
+        } else {
+            Write-Warning "Skipping dismount: ISO was not mounted during VerifyContents. The script only dismounts ISOs it explicitly mounted."
         }
     }
 }
