@@ -47,6 +47,20 @@ jobs:
           Write-Host "SHA256 checksum saved to chkiso.exe.sha"
           Write-Host "Hash: $hash"
 
+      - name: Verify checksum file
+        shell: pwsh
+        run: |
+          Write-Host "Verifying checksum file can be read and validated..."
+          $content = Get-Content -Path "chkiso.exe.sha" -Raw
+          Write-Host "Checksum file contents: $content"
+          # Validate format matches sha256sum format
+          if ($content -match "^[a-f0-9]{64}\s+chkiso\.exe") {
+            Write-Host "✓ Checksum file format is valid"
+          } else {
+            Write-Error "Checksum file format is invalid"
+            exit 1
+          }
+
       - name: Test executable with test.iso - Implanted MD5 Check
         shell: pwsh
         run: |
