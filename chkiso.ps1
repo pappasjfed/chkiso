@@ -38,19 +38,22 @@ param (
 
     # FIX: Restored positional parameter
     [Parameter(Mandatory=$false, Position=1)]
-    [Alias('sha256sum')]
+    [Alias('sha256sum', 'sha256', 'sha','shaString', 'HashString')]
     [string]$Sha256Hash,
 
     [Parameter(Mandatory=$false)]
+    [Alias('sha256file', 'HashFile')]
     [string]$ShaFile,
 
     [Parameter(Mandatory=$false)]
+    [Alias('ValidateContents', 'CheckContents')]
     [switch]$VerifyContents,
 
     [Parameter(Mandatory=$false)]
     [switch]$NoMD5,
 
     [Parameter(Mandatory=$false)]
+    [Alias('umount', 'unmount', 'eject')]
     [switch]$Dismount
 )
 
@@ -119,12 +122,18 @@ function Verify-Contents {
         if ($IsDrive) {
             $mountPath = "$($DriveLetter):\"
             Write-Host "Verifying contents of physical drive at: $mountPath" -ForegroundColor Green
+            # Track the drive letter for consistency with ISO mounting and to support proper dismount logic
+            $script:mountedDriveLetter = $DriveLetter
         } else {
-            Write-Host "Mounting ISO..."; $diskImage = Mount-DiskImage -ImagePath $Path -PassThru
+            Write-Host "Mounting ISO..."
+            $diskImage = Mount-DiskImage -ImagePath $Path -PassThru
             $driveLetter = ($diskImage | Get-Volume).DriveLetter
             if ([string]::IsNullOrWhiteSpace($driveLetter)) { Write-Error "Could not get drive letter."; return }
             $mountPath = "${driveLetter}:\"
             Write-Host "ISO mounted at: $mountPath" -ForegroundColor Green
+            
+            # Track the mounted drive letter for proper cleanup
+            $script:mountedDriveLetter = $driveLetter
         }
         
         $checksumFiles = Get-ChildItem -Path $mountPath -Recurse -Include "*.sha", "sha256sum.txt", "SHA256SUMS"
@@ -228,6 +237,9 @@ function Invoke-ImplantedMd5Check {
 
 # --- Main Script Body ---
 
+# Track mounted drive letter for proper cleanup
+$script:mountedDriveLetter = $null
+
 # FIX: Robust path validation at the start of the script.
 $isDrive = $false
 $driveLetter = ''
@@ -273,16 +285,26 @@ if ($PSBoundParameters.ContainsKey('VerifyContents')) {
 
 if ($PSBoundParameters.ContainsKey('Dismount')) {
     if ($isDrive) {
+        # Eject the drive letter that was explicitly passed in as the Path parameter
+        # This is safe because the user explicitly specified this drive
         try {
             Write-Host "`nEjecting drive $driveLetter`:" -ForegroundColor Yellow
             $shell = New-Object -ComObject Shell.Application
             $shell.Namespace(17).ParseName($driveLetter + ":").InvokeVerb("Eject")
         } catch { Write-Error "Failed to eject drive $driveLetter`: . $_" }
     } else {
-        $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
-        if ($diskImage) {
-            Write-Host "`nDismounting ISO..." -ForegroundColor Yellow
-            Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
+        # For ISO files, only dismount if we actually mounted it during this script execution
+        # This prevents dismounting ISOs that were already mounted before running this script
+        if ($script:mountedDriveLetter) {
+            $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
+            if ($diskImage -and $diskImage.Attached) {
+                Write-Host "`nDismounting ISO from drive $script:mountedDriveLetter`:..." -ForegroundColor Yellow
+                Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
+            } else {
+                Write-Warning "ISO is not currently mounted."
+            }
+        } else {
+            Write-Warning "Skipping dismount: ISO was not mounted during VerifyContents. The script only dismounts ISOs it explicitly mounted."
         }
     }
 }
