@@ -58,6 +58,7 @@ jobs:
         with:
           name: chkiso-exe
           path: |
+            chkiso.ps1
             chkiso.exe
             chkiso.exe.sha
 
@@ -66,6 +67,7 @@ jobs:
         uses: softprops/action-gh-release@v2.0.8
         with:
           files: |
+            chkiso.ps1
             chkiso.exe
             chkiso.exe.sha
         env:
