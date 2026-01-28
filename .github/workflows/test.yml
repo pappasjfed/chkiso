@@ -10,6 +10,11 @@ name: Test chkiso.exe
 jobs:
   test:
     runs-on: windows-latest
+    permissions:
+      contents: read  # Required to checkout code
+    env:
+      TEST_ISO_HASH: >-
+        0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47
 
     steps:
       - name: Checkout code
@@ -24,6 +29,7 @@ jobs:
       - name: Compile chkiso.ps1 to executable
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
             -noConsole:$false -title "chkiso" -version "1.0.0.0" `
             -company "chkiso" -product "chkiso" -copyright "MIT License"
@@ -48,8 +54,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Testing with test.iso and SHA256 hash..."
-          $hash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
-          .\chkiso.exe test\test.iso $hash
+          .\chkiso.exe test\test.iso $env:TEST_ISO_HASH
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -60,9 +65,8 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Creating test hash file..."
-          $hash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
-          "$hash  test.iso" | Out-File `
-            -FilePath "test-hashes.sha" -Encoding ASCII
+          "$env:TEST_ISO_HASH  test.iso" | Out-File `
+            -FilePath "test-hashes.sha" -Encoding utf8NoBOM
 
           Write-Host "Testing with test.iso and hash file..."
           .\chkiso.exe test\test.iso -ShaFile test-hashes.sha
@@ -76,8 +80,11 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Testing chkiso.ps1 directly with test.iso..."
-          $hash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
-          .\chkiso.ps1 test\test.iso $hash
+          .\chkiso.ps1 test\test.iso $env:TEST_ISO_HASH
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test failed with exit code $LASTEXITCODE"
+            exit 1
+          }
           Write-Host "Direct script test completed!"
 
       - name: Upload test artifacts

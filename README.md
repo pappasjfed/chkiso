@@ -23,7 +23,7 @@ chkiso.exe path\to\image.iso
 The Windows executable is automatically built and attached to releases via GitHub Actions. To build manually:
 
 1. Install ps2exe: `Install-Module -Name ps2exe -Force`
-2. Compile: `ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe`
+2. Compile: `ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"`
 
 ## Testing
 

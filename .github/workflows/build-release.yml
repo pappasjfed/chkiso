@@ -9,6 +9,8 @@ name: Build and Release chkiso.exe
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write  # Required to attach files to releases
 
     steps:
       - name: Checkout code
@@ -23,9 +25,14 @@ jobs:
       - name: Compile chkiso.ps1 to executable
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
             -noConsole:$false -title "chkiso" -version "1.0.0.0" `
             -company "chkiso" -product "chkiso" -copyright "MIT License"
+          if (-not (Test-Path chkiso.exe)) {
+            Write-Error "chkiso.exe was not created"
+            exit 1
+          }
 
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
@@ -35,7 +42,7 @@ jobs:
 
       - name: Attach to Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2.0.8
         with:
           files: chkiso.exe
         env:
