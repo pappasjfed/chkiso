@@ -38,13 +38,15 @@ param (
 
     # FIX: Restored positional parameter
     [Parameter(Mandatory=$false, Position=1)]
-    [Alias('sha256sum')]
+    [Alias('sha256sum', 'sha256', 'sha','shaString', 'HashString')]
     [string]$Sha256Hash,
 
     [Parameter(Mandatory=$false)]
+    [Alias('sha256file', 'HashFile')]
     [string]$ShaFile,
 
     [Parameter(Mandatory=$false)]
+    [Alias('ValidateContents', 'CheckContents')]
     [switch]$VerifyContents,
 
     [Parameter(Mandatory=$false)]
