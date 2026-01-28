@@ -136,6 +136,55 @@ jobs:
           }
           Write-Host "Direct script test completed!"
 
+      - name: Test with mounted ISO as drive letter
+        shell: pwsh
+        run: |
+          Write-Host "Mounting test.iso as a drive letter..."
+          $mountResult = Mount-DiskImage -ImagePath `
+            (Resolve-Path "test\test.iso").Path -PassThru
+          $driveLetter = ($mountResult | Get-Volume).DriveLetter
+
+          if ([string]::IsNullOrWhiteSpace($driveLetter)) {
+            Write-Error "Failed to get drive letter for mounted ISO"
+            exit 1
+          }
+
+          Write-Host "ISO mounted at drive: $driveLetter`:"
+
+          try {
+            # Test with Implanted MD5 Check
+            Write-Host "`nTesting mounted drive with Implanted MD5 Check..."
+            .\chkiso.exe "$driveLetter`:"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Mounted drive MD5 test failed"
+              exit 1
+            }
+            Write-Host "Mounted drive MD5 test passed!"
+
+            # Test with SHA256 Hash Check
+            Write-Host "`nTesting mounted drive with SHA256 hash..."
+            .\chkiso.exe "$driveLetter`:" $env:TEST_ISO_HASH
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Mounted drive SHA256 test failed"
+              exit 1
+            }
+            Write-Host "Mounted drive SHA256 test passed!"
+
+            # Test with script directly
+            Write-Host "`nTesting mounted drive with chkiso.ps1 directly..."
+            .\chkiso.ps1 "$driveLetter`:" $env:TEST_ISO_HASH
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Mounted drive script test failed"
+              exit 1
+            }
+            Write-Host "Mounted drive script test passed!"
+
+          } finally {
+            Write-Host "`nDismounting ISO..."
+            Dismount-DiskImage -ImagePath (Resolve-Path "test\test.iso").Path
+            Write-Host "ISO dismounted successfully"
+          }
+
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
