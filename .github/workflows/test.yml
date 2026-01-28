@@ -40,9 +40,7 @@ jobs:
           Write-Host "Successfully created chkiso.exe"
 
       - name: Sign executable
-        if: >-
-          vars.CERTIFICATE != '' && vars.CERTHASH != '' &&
-          vars.CERTNAME != ''
+        if: vars.CERTHASH != '' && vars.CERTNAME != ''
         uses: DanaBear/code-sign-action@v4
         with:
           certificate: ${{ secrets.CERTIFICATE }}
@@ -66,7 +64,7 @@ jobs:
           Write-Host "Verifying checksum file can be read and validated..."
           $content = Get-Content -Path "chkiso.exe.sha" -Raw
           Write-Host "Checksum file contents: $content"
-          # Validate format matches sha256sum format
+          # Validate format matches sha256sum format (lowercase hex)
           if ($content -match "^[a-f0-9]{64}\s+chkiso\.exe") {
             Write-Host "✓ Checksum file format is valid"
           } else {

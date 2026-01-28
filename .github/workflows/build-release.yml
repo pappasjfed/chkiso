@@ -35,9 +35,7 @@ jobs:
           }
 
       - name: Sign executable
-        if: >-
-          vars.CERTIFICATE != '' && vars.CERTHASH != '' &&
-          vars.CERTNAME != ''
+        if: vars.CERTHASH != '' && vars.CERTNAME != ''
         uses: DanaBear/code-sign-action@v4
         with:
           certificate: ${{ secrets.CERTIFICATE }}

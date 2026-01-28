@@ -8,8 +8,17 @@ Go to **Settings** → **Secrets and variables** → **Actions** and add:
 
 1. **CERTIFICATE** (Secret)
    - The base64-encoded PFX certificate
-   - To create: `certutil -encode certificate.pfx certificate.txt`
-   - Copy the content between `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` (including those lines)
+   - To create in PowerShell:
+     ```powershell
+     $bytes = [System.IO.File]::ReadAllBytes("certificate.pfx")
+     $base64 = [System.Convert]::ToBase64String($bytes)
+     $base64 | Out-File -FilePath "certificate-base64.txt"
+     ```
+   - Or using certutil:
+     ```cmd
+     certutil -encode certificate.pfx certificate-base64.txt
+     ```
+   - Then remove the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines and any whitespace/newlines to create a single base64 string
 
 2. **CERT_PASSWORD** (Secret)
    - The password for the PFX certificate
