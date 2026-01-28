@@ -34,16 +34,28 @@ jobs:
             exit 1
           }
 
+      - name: Calculate SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path chkiso.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  chkiso.exe" | Out-File -FilePath "chkiso.exe.sha" -Encoding utf8NoBOM
+          Write-Host "SHA256 checksum saved to chkiso.exe.sha"
+          Write-Host "Hash: $hash"
+
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
         with:
           name: chkiso-exe
-          path: chkiso.exe
+          path: |
+            chkiso.exe
+            chkiso.exe.sha
 
       - name: Attach to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2.0.8
         with:
-          files: chkiso.exe
+          files: |
+            chkiso.exe
+            chkiso.exe.sha
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

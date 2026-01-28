@@ -39,6 +39,14 @@ jobs:
           }
           Write-Host "Successfully created chkiso.exe"
 
+      - name: Calculate SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path chkiso.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  chkiso.exe" | Out-File -FilePath "chkiso.exe.sha" -Encoding utf8NoBOM
+          Write-Host "SHA256 checksum saved to chkiso.exe.sha"
+          Write-Host "Hash: $hash"
+
       - name: Test executable with test.iso - Implanted MD5 Check
         shell: pwsh
         run: |
@@ -94,4 +102,5 @@ jobs:
           name: test-artifacts
           path: |
             chkiso.exe
+            chkiso.exe.sha
             test-hashes.sha
