@@ -221,13 +221,14 @@ function Invoke-ImplantedMd5Check {
         $md5.TransformBlock($neutralizedPvd, 0, $neutralizedPvd.Length, $null, 0) | Out-Null
         $fileStream.Seek($PVD_SIZE, [System.IO.SeekOrigin]::Current) | Out-Null
         # Part C
-        $totalToRead = $hashEndOffset - $fileStream.Position; $finalBlock = @()
+        $totalToRead = $hashEndOffset - $fileStream.Position
         while ($totalToRead -gt 0) {
-            if ($finalBlock.Length -gt 0) { $md5.TransformBlock($finalBlock, 0, $finalBlock.Length, $null, 0) | Out-Null }
             $bytesToRead = [System.Math]::Min($buffer.Length, $totalToRead); $bytesRead = $fileStream.Read($buffer, 0, $bytesToRead)
-            if ($bytesRead -eq 0) { break }; $finalBlock = $buffer[0..($bytesRead-1)]; $totalToRead -= $bytesRead
+            if ($bytesRead -eq 0) { break }
+            $md5.TransformBlock($buffer, 0, $bytesRead, $null, 0) | Out-Null
+            $totalToRead -= $bytesRead
         }
-        $md5.TransformFinalBlock($finalBlock, 0, $finalBlock.Length) | Out-Null
+        $md5.TransformFinalBlock(@(), 0, 0) | Out-Null
         $calculatedMd5Hex = [System.BitConverter]::ToString($md5.Hash).Replace("-", "").ToLower()
         return [PSCustomObject]@{ VerificationMethod = "ASCII String (checkisomd5 compatible)"; StoredMD5 = $storedHash; CalculatedMD5 = $calculatedMd5Hex; IsIntegrityOK = $storedHash -eq $calculatedMd5Hex }
     } catch { Write-Error "An error occurred during check: $_" }
