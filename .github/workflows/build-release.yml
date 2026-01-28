@@ -1,6 +1,7 @@
+---
 name: Build and Release chkiso.exe
 
-on:
+"on":
   release:
     types: [created]
   workflow_dispatch:
@@ -8,28 +9,30 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install ps2exe
         shell: pwsh
         run: |
           Install-Module -Name ps2exe -Force -Scope CurrentUser
           Import-Module ps2exe
-      
+
       - name: Compile chkiso.ps1 to executable
         shell: pwsh
         run: |
-          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"
-      
+          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
+            -noConsole:$false -title "chkiso" -version "1.0.0.0" `
+            -company "chkiso" -product "chkiso" -copyright "MIT License"
+
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4
         with:
           name: chkiso-exe
           path: chkiso.exe
-      
+
       - name: Attach to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v1

@@ -1,81 +1,85 @@
+---
 name: Test chkiso.exe
 
-on:
+"on":
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install ps2exe
         shell: pwsh
         run: |
           Install-Module -Name ps2exe -Force -Scope CurrentUser
           Import-Module ps2exe
-      
+
       - name: Compile chkiso.ps1 to executable
         shell: pwsh
         run: |
-          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"
+          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
+            -noConsole:$false -title "chkiso" -version "1.0.0.0" `
+            -company "chkiso" -product "chkiso" -copyright "MIT License"
           if (-not (Test-Path chkiso.exe)) {
             Write-Error "chkiso.exe was not created"
             exit 1
           }
           Write-Host "Successfully created chkiso.exe"
-      
+
       - name: Test executable with test.iso - Implanted MD5 Check
         shell: pwsh
         run: |
-          Write-Host "Testing chkiso.exe with test.iso (Implanted MD5 Check)..."
+          Write-Host "Testing with test.iso (Implanted MD5 Check)..."
           .\chkiso.exe test\test.iso
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
           }
           Write-Host "Test passed!"
-      
+
       - name: Test executable with test.iso - SHA256 Hash Check
         shell: pwsh
         run: |
-          Write-Host "Testing chkiso.exe with test.iso and SHA256 hash..."
-          $expectedHash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
-          .\chkiso.exe test\test.iso $expectedHash
+          Write-Host "Testing with test.iso and SHA256 hash..."
+          $hash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
+          .\chkiso.exe test\test.iso $hash
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
           }
           Write-Host "Test passed!"
-      
+
       - name: Test executable with test.iso - Hash File Check
         shell: pwsh
         run: |
           Write-Host "Creating test hash file..."
-          $expectedHash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
-          "$expectedHash  test.iso" | Out-File -FilePath "test-hashes.sha" -Encoding ASCII
-          
-          Write-Host "Testing chkiso.exe with test.iso and hash file..."
+          $hash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
+          "$hash  test.iso" | Out-File `
+            -FilePath "test-hashes.sha" -Encoding ASCII
+
+          Write-Host "Testing with test.iso and hash file..."
           .\chkiso.exe test\test.iso -ShaFile test-hashes.sha
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
           }
           Write-Host "Test passed!"
-      
+
       - name: Test script directly (sanity check)
         shell: pwsh
         run: |
           Write-Host "Testing chkiso.ps1 directly with test.iso..."
-          $expectedHash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
-          .\chkiso.ps1 test\test.iso $expectedHash
+          $hash = "0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47"
+          .\chkiso.ps1 test\test.iso $hash
           Write-Host "Direct script test completed!"
-      
+
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
