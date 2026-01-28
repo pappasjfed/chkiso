@@ -20,7 +20,15 @@ chkiso.exe path\to\image.iso
 
 ## Building
 
-The Windows executable is automatically built and attached to releases via GitHub Actions. To build manually:
+The Windows executable is automatically built and attached to releases via GitHub Actions. 
+
+### Code Signing
+
+The executable can be automatically signed if code signing certificates are configured. See [CODE_SIGNING.md](CODE_SIGNING.md) for setup instructions. If certificates are not configured, the workflow will build an unsigned executable.
+
+### Manual Build
+
+To build manually:
 
 1. Install ps2exe: `Install-Module -Name ps2exe -Force`
 2. Compile: `ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"`

@@ -39,6 +39,19 @@ jobs:
           }
           Write-Host "Successfully created chkiso.exe"
 
+      - name: Sign executable
+        if: >-
+          vars.CERTIFICATE != '' && vars.CERTHASH != '' &&
+          vars.CERTNAME != ''
+        uses: DanaBear/code-sign-action@v4
+        with:
+          certificate: ${{ secrets.CERTIFICATE }}
+          password: ${{ secrets.CERT_PASSWORD }}
+          certificatesha1: ${{ vars.CERTHASH }}
+          certificatename: ${{ vars.CERTNAME }}
+          folder: '.'
+          recursive: false
+
       - name: Calculate SHA256 checksum
         shell: pwsh
         run: |
