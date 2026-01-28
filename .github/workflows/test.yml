@@ -12,13 +12,29 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read  # Required to checkout code
-    env:
-      TEST_ISO_HASH: >-
-        0ba222386f799d2852c1b76cd0ebfc314f527f2b28bb056ab195915136bb5f47
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Read test ISO hash from file
+        id: read_hash
+        shell: pwsh
+        run: |
+          $hashFile = "test/test.iso.sha"
+          if (-not (Test-Path $hashFile)) {
+            Write-Error "Hash file not found: $hashFile"
+            exit 1
+          }
+          $content = Get-Content $hashFile -Raw
+          if ($content -match "^([a-f0-9]{64})") {
+            $hash = $matches[1]
+            Write-Host "Read hash from file: $hash"
+            "TEST_ISO_HASH=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            Write-Error "Invalid hash format in file: $hashFile"
+            exit 1
+          }
 
       - name: Install ps2exe
         shell: pwsh
