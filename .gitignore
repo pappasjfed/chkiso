@@ -1,0 +1,38 @@
+# Ignore .vagrant
+**/.vagrant*
+
+# Ignore subdirectories
+!.github/**
+dist/
+node_modules/
+node_modules.tar
+coverage/
+docs/
+.yarn/cache
+output/
+**/*group*/
+**/*chunk*/
+
+# Ignore Repositories
+**/rhel-*-for-x86_64-*-rpms/
+**/codeready-builder-for-rhel-*-x86_64-rpms/
+**/epel*/
+**/microsoft*/
+**/docker-ce-*/
+**/hashicorp/
+
+# Ignore Files
+*.tgz
+*.gz
+*.zip
+*.bundle
+*.iso
+*.sha
+*.log
+*.sha
+*iso.txt
+*iso.sha
+*.dxp
+
+**/docker-ce-*/
+desktop.ini
