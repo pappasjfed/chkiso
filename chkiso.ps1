@@ -53,6 +53,7 @@ param (
     [switch]$NoMD5,
 
     [Parameter(Mandatory=$false)]
+    [Alias('umount', 'unmount', 'eject')]
     [switch]$Dismount
 )
 
