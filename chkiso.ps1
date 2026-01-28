@@ -119,8 +119,8 @@ function Verify-Contents {
         if ($IsDrive) {
             $mountPath = "$($DriveLetter):\"
             Write-Host "Verifying contents of physical drive at: $mountPath" -ForegroundColor Green
-            # Track the drive letter for potential dismount (it's the input drive)
-            $script:MountedDriveLetter = $DriveLetter
+            # Track the drive letter for consistency with ISO mounting and to support proper dismount logic
+            $script:mountedDriveLetter = $DriveLetter
         } else {
             Write-Host "Mounting ISO..."
             $diskImage = Mount-DiskImage -ImagePath $Path -PassThru
@@ -130,7 +130,7 @@ function Verify-Contents {
             Write-Host "ISO mounted at: $mountPath" -ForegroundColor Green
             
             # Track the mounted drive letter for proper cleanup
-            $script:MountedDriveLetter = $driveLetter
+            $script:mountedDriveLetter = $driveLetter
         }
         
         $checksumFiles = Get-ChildItem -Path $mountPath -Recurse -Include "*.sha", "sha256sum.txt", "SHA256SUMS"
@@ -235,7 +235,7 @@ function Invoke-ImplantedMd5Check {
 # --- Main Script Body ---
 
 # Track mounted drive letter for proper cleanup
-$script:MountedDriveLetter = $null
+$script:mountedDriveLetter = $null
 
 # FIX: Robust path validation at the start of the script.
 $isDrive = $false
@@ -289,20 +289,15 @@ if ($PSBoundParameters.ContainsKey('Dismount')) {
             $shell.Namespace(17).ParseName($driveLetter + ":").InvokeVerb("Eject")
         } catch { Write-Error "Failed to eject drive $driveLetter`: . $_" }
     } else {
-        # For ISO files, only dismount if we actually mounted it (tracked by MountedDriveLetter)
-        if ($script:MountedDriveLetter) {
-            Write-Host "`nDismounting ISO from drive $script:MountedDriveLetter`:..." -ForegroundColor Yellow
-            $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
-            if ($diskImage -and $diskImage.Attached) {
-                Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
-            }
-        } else {
-            # If VerifyContents was not called, check if the ISO is mounted and dismount it
-            $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
-            if ($diskImage -and $diskImage.Attached) {
+        # For ISO files, only dismount if we actually mounted it or if it's currently attached
+        $diskImage = Get-DiskImage -ImagePath $ResolvedPath -ErrorAction SilentlyContinue
+        if ($diskImage -and $diskImage.Attached) {
+            if ($script:mountedDriveLetter) {
+                Write-Host "`nDismounting ISO from drive $script:mountedDriveLetter`:..." -ForegroundColor Yellow
+            } else {
                 Write-Host "`nDismounting ISO..." -ForegroundColor Yellow
-                Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
             }
+            Dismount-DiskImage -ImagePath $ResolvedPath | Out-Null
         }
     }
 }
