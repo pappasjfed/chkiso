@@ -206,8 +206,7 @@ function Invoke-ImplantedMd5Check {
 
         $skipSectors = 0; $skipMatch = [regex]::Match($appUseString, 'SKIPSECTORS\s*=\s*(\d+)'); if ($skipMatch.Success) { $skipSectors = [int]$skipMatch.Groups[1].Value }
         $hashEndOffset = $fileLength - ($skipSectors * $SECTOR_SIZE)
-        $implantDataEndIndex = $appUseString.IndexOf("  "); if ($implantDataEndIndex -lt 0) { $implantDataEndIndex = $APP_USE_SIZE }
-        $implantDataLength = $implantDataEndIndex
+        $implantDataLength = $APP_USE_SIZE  # Clear entire 512-byte Application Use field
         $neutralizedPvd = $pvdBlock.Clone(); [System.Array]::Clear($neutralizedPvd, $APP_USE_OFFSET_IN_PVD, $implantDataLength)
 
         $fileStream.Seek(0, [System.IO.SeekOrigin]::Begin) | Out-Null; $buffer = New-Object byte[] 65536
@@ -219,7 +218,7 @@ function Invoke-ImplantedMd5Check {
         }
         # Part B
         $md5.TransformBlock($neutralizedPvd, 0, $neutralizedPvd.Length, $null, 0) | Out-Null
-        $fileStream.Seek($PVD_SIZE, [System.IO.SeekOrigin]::Current) | Out-Null
+        $fileStream.Seek($PVD_OFFSET + $PVD_SIZE, [System.IO.SeekOrigin]::Begin) | Out-Null
         # Part C
         $totalToRead = $hashEndOffset - $fileStream.Position
         while ($totalToRead -gt 0) {
