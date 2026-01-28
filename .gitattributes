@@ -33,6 +33,7 @@ wslconfig text eol=crlf
 *.tgz filter=lfs diff=lfs merge=lfs -text
 *.{zip,[zZ][iI][pP]} filter=lfs diff=lfs merge=lfs -text
 *.jar filter=lfs diff=lfs merge=lfs -text
+*.iso filter=lfs diff=lfs merge=lfs -text
 
 # Images
 *.{gif,[gG][iI][fF]} filter=lfs diff=lfs merge=lfs -text

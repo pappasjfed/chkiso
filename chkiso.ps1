@@ -206,9 +206,10 @@ function Invoke-ImplantedMd5Check {
 
         $skipSectors = 0; $skipMatch = [regex]::Match($appUseString, 'SKIPSECTORS\s*=\s*(\d+)'); if ($skipMatch.Success) { $skipSectors = [int]$skipMatch.Groups[1].Value }
         $hashEndOffset = $fileLength - ($skipSectors * $SECTOR_SIZE)
-        $implantDataEndIndex = $appUseString.IndexOf("  "); if ($implantDataEndIndex -lt 0) { $implantDataEndIndex = $APP_USE_SIZE }
-        $implantDataLength = $implantDataEndIndex
-        $neutralizedPvd = $pvdBlock.Clone(); [System.Array]::Clear($neutralizedPvd, $APP_USE_OFFSET_IN_PVD, $implantDataLength)
+        $implantDataLength = $APP_USE_SIZE  # Clear entire 512-byte Application Use field
+        $neutralizedPvd = $pvdBlock.Clone()
+        # Fill with spaces (0x20), not zeros - this matches libcheckisomd5 behavior
+        for ($i = 0; $i -lt $implantDataLength; $i++) { $neutralizedPvd[$APP_USE_OFFSET_IN_PVD + $i] = 0x20 }
 
         $fileStream.Seek(0, [System.IO.SeekOrigin]::Begin) | Out-Null; $buffer = New-Object byte[] 65536
         # Part A
@@ -219,15 +220,16 @@ function Invoke-ImplantedMd5Check {
         }
         # Part B
         $md5.TransformBlock($neutralizedPvd, 0, $neutralizedPvd.Length, $null, 0) | Out-Null
-        $fileStream.Seek($PVD_SIZE, [System.IO.SeekOrigin]::Current) | Out-Null
+        $fileStream.Seek($PVD_OFFSET + $PVD_SIZE, [System.IO.SeekOrigin]::Begin) | Out-Null
         # Part C
-        $totalToRead = $hashEndOffset - $fileStream.Position; $finalBlock = @()
+        $totalToRead = $hashEndOffset - $fileStream.Position
         while ($totalToRead -gt 0) {
-            if ($finalBlock.Length -gt 0) { $md5.TransformBlock($finalBlock, 0, $finalBlock.Length, $null, 0) | Out-Null }
             $bytesToRead = [System.Math]::Min($buffer.Length, $totalToRead); $bytesRead = $fileStream.Read($buffer, 0, $bytesToRead)
-            if ($bytesRead -eq 0) { break }; $finalBlock = $buffer[0..($bytesRead-1)]; $totalToRead -= $bytesRead
+            if ($bytesRead -eq 0) { break }
+            $md5.TransformBlock($buffer, 0, $bytesRead, $null, 0) | Out-Null
+            $totalToRead -= $bytesRead
         }
-        $md5.TransformFinalBlock($finalBlock, 0, $finalBlock.Length) | Out-Null
+        $md5.TransformFinalBlock(@(), 0, 0) | Out-Null
         $calculatedMd5Hex = [System.BitConverter]::ToString($md5.Hash).Replace("-", "").ToLower()
         return [PSCustomObject]@{ VerificationMethod = "ASCII String (checkisomd5 compatible)"; StoredMD5 = $storedHash; CalculatedMD5 = $calculatedMd5Hex; IsIntegrityOK = $storedHash -eq $calculatedMd5Hex }
     } catch { Write-Error "An error occurred during check: $_" }
