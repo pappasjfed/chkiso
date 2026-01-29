@@ -312,3 +312,6 @@ if ($PSBoundParameters.ContainsKey('Dismount')) {
         }
     }
 }
+
+# Exit successfully if we reached this point
+exit 0
