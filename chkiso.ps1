@@ -254,8 +254,22 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
         if ($volume.DriveType -eq 'CD-ROM') {
-            $isDrive = $true
-            $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
+            # Check if this is a mounted ISO image
+            $diskImage = Get-DiskImage | Where-Object { 
+                $_.Attached -and ($_ | Get-Volume -ErrorAction SilentlyContinue).DriveLetter -eq $driveLetter 
+            }
+            
+            if ($diskImage -and $diskImage.ImagePath) {
+                # This is a mounted ISO - use the ISO file path directly instead of Win32 device path
+                # This avoids ps2exe issues with Win32 device paths on mounted ISOs
+                Write-Host "Detected mounted ISO at drive $($driveLetter): - using source file: $($diskImage.ImagePath)"
+                $ResolvedPath = $diskImage.ImagePath
+                $isDrive = $false  # Treat as a file, not a device
+            } else {
+                # This is a physical CD/DVD drive
+                $isDrive = $true
+                $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
+            }
         } else {
             Write-Error "Path '$Path' is a drive, but not a CD/DVD drive."; exit
         }
