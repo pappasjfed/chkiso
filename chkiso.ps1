@@ -57,6 +57,10 @@ param (
     [switch]$Dismount
 )
 
+# --- Error Tracking ---
+# Track if any errors occurred during verification
+$script:hasErrors = $false
+
 # --- Helper Functions ---
 
 function Get-Sha256FromPath {
@@ -93,15 +97,24 @@ function Verify-PathAgainstHashString {
     $calculatedHash = Get-Sha256FromPath -TargetPath $Path -IsDrive $IsDrive -DriveLetter $DriveLetter
     Write-Host "  - Expected:   $ExpectedHash"
     Write-Host "  - Calculated: $calculatedHash"
-    if ($calculatedHash -eq $ExpectedHash) { Write-Host "Result: SUCCESS - Hashes match." -ForegroundColor Green }
-    else { Write-Host "Result: FAILURE - Hashes DO NOT match." -ForegroundColor Red }
+    if ($calculatedHash -eq $ExpectedHash) { 
+        Write-Host "Result: SUCCESS - Hashes match." -ForegroundColor Green 
+    }
+    else { 
+        Write-Host "Result: FAILURE - Hashes DO NOT match." -ForegroundColor Red 
+        $script:hasErrors = $true
+    }
 }
 
 function Verify-PathAgainstHashFile {
     param ([string]$Path, [string]$HashFilePath, [bool]$IsDrive, [string]$DriveLetter)
     Write-Host "`n--- Verifying Path Against SHA256 Hash File ---" -ForegroundColor Cyan
     try { $HashFileResolved = (Resolve-Path -LiteralPath $HashFilePath.Trim("`"")).Path }
-    catch { Write-Error "Hash file not found: $HashFilePath"; return }
+    catch { 
+        Write-Error "Hash file not found: $HashFilePath"
+        $script:hasErrors = $true
+        return 
+    }
     
     $isoFileNamePattern = if ($IsDrive) { "*.iso" } else { (Get-Item -LiteralPath $Path).Name }
     
@@ -114,7 +127,11 @@ function Verify-PathAgainstHashFile {
         $matchInfo = Get-Content $HashFileResolved | Select-String -Pattern $genericPattern | Select-Object -First 1
     }
 
-    if (-not $matchInfo) { Write-Error "Could not find a valid SHA256 hash entry in the hash file '$HashFileResolved'."; return }
+    if (-not $matchInfo) { 
+        Write-Error "Could not find a valid SHA256 hash entry in the hash file '$HashFileResolved'."
+        $script:hasErrors = $true
+        return 
+    }
     
     $expectedHash = $matchInfo.Matches[0].Groups[1].Value.ToLower()
     Verify-PathAgainstHashString -Path $Path -ExpectedHash $expectedHash -IsDrive $IsDrive -DriveLetter $DriveLetter
@@ -134,7 +151,11 @@ function Verify-Contents {
             Write-Host "Mounting ISO..."
             $diskImage = Mount-DiskImage -ImagePath $Path -PassThru
             $driveLetter = ($diskImage | Get-Volume).DriveLetter
-            if ([string]::IsNullOrWhiteSpace($driveLetter)) { Write-Error "Could not get drive letter."; return }
+            if ([string]::IsNullOrWhiteSpace($driveLetter)) { 
+                Write-Error "Could not get drive letter."
+                $script:hasErrors = $true
+                return 
+            }
             $mountPath = "${driveLetter}:\"
             Write-Host "ISO mounted at: $mountPath" -ForegroundColor Green
             
@@ -165,9 +186,17 @@ function Verify-Contents {
             }
         }
         Write-Host "`n--- Verification Summary ---" -ForegroundColor Cyan
-        if ($failedFiles -eq 0 -and $totalFiles -gt 0) { Write-Host "Success: All $totalFiles files verified." -ForegroundColor Green }
-        else { Write-Host "Failure: $failedFiles out of $totalFiles files failed." -ForegroundColor Red }
-    } catch { Write-Error "An error occurred: $_" }
+        if ($failedFiles -eq 0 -and $totalFiles -gt 0) { 
+            Write-Host "Success: All $totalFiles files verified." -ForegroundColor Green 
+        }
+        else { 
+            Write-Host "Failure: $failedFiles out of $totalFiles files failed." -ForegroundColor Red
+            $script:hasErrors = $true
+        }
+    } catch { 
+        Write-Error "An error occurred: $_"
+        $script:hasErrors = $true
+    }
     # The finally block is removed from here; dismount/eject is handled at the end of the script.
 }
 
@@ -177,12 +206,21 @@ function Verify-ImplantedIsoMd5 {
     $result = Invoke-ImplantedMd5Check -Path $Path -IsDrive $IsDrive -DriveLetter $DriveLetter
     if ($result) {
         if ($result.VerificationMethod -eq 'FIPS_BLOCKED') {
-            Write-Warning "Found implanted MD5 hash: $($result.StoredMD5)"; Write-Warning "Verification blocked by system FIPS security policy."
+            Write-Warning "Found implanted MD5 hash: $($result.StoredMD5)"
+            Write-Warning "Verification blocked by system FIPS security policy."
         } else {
             $result | Format-List
-            if ($result.IsIntegrityOK) { Write-Host "`nSUCCESS: Implanted MD5 is valid." -ForegroundColor Green }
-            else { Write-Warning "`nFAILURE: Implanted MD5 does not match calculated hash." }
+            if ($result.IsIntegrityOK) { 
+                Write-Host "`nSUCCESS: Implanted MD5 is valid." -ForegroundColor Green 
+            }
+            else { 
+                Write-Warning "`nFAILURE: Implanted MD5 does not match calculated hash."
+                $script:hasErrors = $true
+            }
         }
+    } else {
+        # If result is null, an error occurred
+        $script:hasErrors = $true
     }
 }
 
@@ -198,7 +236,11 @@ function Invoke-ImplantedMd5Check {
 
         $pvdBlock = New-Object byte[] $PVD_SIZE
         $fileStream.Seek($PVD_OFFSET, [System.IO.SeekOrigin]::Begin) | Out-Null
-        if ($fileStream.Read($pvdBlock, 0, $PVD_SIZE) -ne $PVD_SIZE) { Write-Error "Could not read PVD."; return $null }
+        if ($fileStream.Read($pvdBlock, 0, $PVD_SIZE) -ne $PVD_SIZE) { 
+            Write-Error "Could not read PVD."
+            $script:hasErrors = $true
+            return $null 
+        }
         
         $appUseString = [System.Text.Encoding]::ASCII.GetString($pvdBlock, $APP_USE_OFFSET_IN_PVD, $APP_USE_SIZE)
         $md5Match = [regex]::Match($appUseString, 'ISO MD5SUM = ([0-9a-fA-F]{32})')
@@ -239,7 +281,10 @@ function Invoke-ImplantedMd5Check {
         $md5.TransformFinalBlock(@(), 0, 0) | Out-Null
         $calculatedMd5Hex = [System.BitConverter]::ToString($md5.Hash).Replace("-", "").ToLower()
         return [PSCustomObject]@{ VerificationMethod = "ASCII String (checkisomd5 compatible)"; StoredMD5 = $storedHash; CalculatedMD5 = $calculatedMd5Hex; IsIntegrityOK = $storedHash -eq $calculatedMd5Hex }
-    } catch { Write-Error "An error occurred during check: $_" }
+    } catch { 
+        Write-Error "An error occurred during check: $_"
+        $script:hasErrors = $true
+    }
     finally { if ($fileStream) { $fileStream.Close() }; if ($md5) { $md5.Dispose() } }
     return $null
 }
@@ -350,5 +395,9 @@ if ($PSBoundParameters.ContainsKey('Dismount')) {
     }
 }
 
-# Exit successfully if we reached this point
-exit 0
+# Exit with proper code based on whether errors occurred
+if ($script:hasErrors) {
+    exit 1
+} else {
+    exit 0
+}
