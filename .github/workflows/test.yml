@@ -1,0 +1,197 @@
+---
+name: Test chkiso.exe
+
+"on":
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    permissions:
+      contents: read  # Required to checkout code
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read test ISO hash from file
+        id: read_hash
+        shell: pwsh
+        run: |
+          $hashFile = "test/test.iso.sha"
+          if (-not (Test-Path $hashFile)) {
+            Write-Error "Hash file not found: $hashFile"
+            exit 1
+          }
+          $content = Get-Content $hashFile -Raw
+          if ($content -match "^([a-f0-9]{64})") {
+            $hash = $matches[1]
+            Write-Host "Read hash from file: $hash"
+            "TEST_ISO_HASH=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            Write-Error "Invalid hash format in file: $hashFile"
+            exit 1
+          }
+
+      - name: Install ps2exe
+        shell: pwsh
+        run: |
+          Install-Module -Name ps2exe -Force -Scope CurrentUser
+          Import-Module ps2exe
+
+      - name: Compile chkiso.ps1 to executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
+            -noConsole:$false -title "chkiso" -version "1.0.0.0" `
+            -company "chkiso" -product "chkiso" -copyright "MIT License"
+          if (-not (Test-Path chkiso.exe)) {
+            Write-Error "chkiso.exe was not created"
+            exit 1
+          }
+          Write-Host "Successfully created chkiso.exe"
+
+      - name: Sign executable
+        if: vars.CERTHASH != '' && vars.CERTNAME != ''
+        uses: DanaBear/code-sign-action@v4
+        with:
+          certificate: ${{ secrets.CERTIFICATE }}
+          password: ${{ secrets.CERT_PASSWORD }}
+          certificatesha1: ${{ vars.CERTHASH }}
+          certificatename: ${{ vars.CERTNAME }}
+          folder: '.'
+          recursive: false
+
+      - name: Calculate SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path chkiso.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  chkiso.exe" | Out-File -FilePath "chkiso.exe.sha" -Encoding utf8NoBOM
+          Write-Host "SHA256 checksum saved to chkiso.exe.sha"
+          Write-Host "Hash: $hash"
+
+      - name: Verify checksum file
+        shell: pwsh
+        run: |
+          Write-Host "Verifying checksum file can be read and validated..."
+          $content = Get-Content -Path "chkiso.exe.sha" -Raw
+          Write-Host "Checksum file contents: $content"
+          # Validate format matches sha256sum format (lowercase hex)
+          if ($content -match "^[a-f0-9]{64}\s+chkiso\.exe") {
+            Write-Host "✓ Checksum file format is valid"
+          } else {
+            Write-Error "Checksum file format is invalid"
+            exit 1
+          }
+
+      - name: Test executable with test.iso - Implanted MD5 Check
+        shell: pwsh
+        run: |
+          Write-Host "Testing with test.iso (Implanted MD5 Check)..."
+          .\chkiso.exe test\test.iso
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Test passed!"
+
+      - name: Test executable with test.iso - SHA256 Hash Check
+        shell: pwsh
+        run: |
+          Write-Host "Testing with test.iso and SHA256 hash..."
+          .\chkiso.exe test\test.iso $env:TEST_ISO_HASH
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Test passed!"
+
+      - name: Test executable with test.iso - Hash File Check
+        shell: pwsh
+        run: |
+          Write-Host "Creating test hash file..."
+          "$env:TEST_ISO_HASH  test.iso" | Out-File `
+            -FilePath "test-hashes.sha" -Encoding utf8NoBOM
+
+          Write-Host "Testing with test.iso and hash file..."
+          .\chkiso.exe test\test.iso -ShaFile test-hashes.sha
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Test passed!"
+
+      - name: Test script directly (sanity check)
+        shell: pwsh
+        run: |
+          Write-Host "Testing chkiso.ps1 directly with test.iso..."
+          .\chkiso.ps1 test\test.iso $env:TEST_ISO_HASH
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Direct script test completed!"
+
+      - name: Test with mounted ISO as drive letter
+        shell: pwsh
+        run: |
+          Write-Host "Mounting test.iso as a drive letter..."
+          $mountResult = Mount-DiskImage -ImagePath `
+            (Resolve-Path "test\test.iso").Path -PassThru
+          $driveLetter = ($mountResult | Get-Volume).DriveLetter
+
+          if ([string]::IsNullOrWhiteSpace($driveLetter)) {
+            Write-Error "Failed to get drive letter for mounted ISO"
+            exit 1
+          }
+
+          Write-Host "ISO mounted at drive: $driveLetter`:"
+
+          try {
+            # Test with Implanted MD5 Check
+            Write-Host "`nTesting mounted drive with Implanted MD5 Check..."
+            .\chkiso.exe "$driveLetter`:"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Mounted drive MD5 test failed"
+              exit 1
+            }
+            Write-Host "Mounted drive MD5 test passed!"
+
+            # Test with SHA256 Hash Check
+            Write-Host "`nTesting mounted drive with SHA256 hash..."
+            .\chkiso.exe "$driveLetter`:" $env:TEST_ISO_HASH
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Mounted drive SHA256 test failed"
+              exit 1
+            }
+            Write-Host "Mounted drive SHA256 test passed!"
+
+            # Test with script directly
+            Write-Host "`nTesting mounted drive with chkiso.ps1 directly..."
+            .\chkiso.ps1 "$driveLetter`:" $env:TEST_ISO_HASH
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Mounted drive script test failed"
+              exit 1
+            }
+            Write-Host "Mounted drive script test passed!"
+
+          } finally {
+            Write-Host "`nDismounting ISO..."
+            Dismount-DiskImage -ImagePath (Resolve-Path "test\test.iso").Path
+            Write-Host "ISO dismounted successfully"
+          }
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: |
+            chkiso.ps1
+            chkiso.exe
+            chkiso.exe.sha
+            test-hashes.sha
