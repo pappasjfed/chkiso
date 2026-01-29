@@ -259,9 +259,27 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
         if ($volume.DriveType -eq 'CD-ROM') {
-            # Check if this is a mounted ISO image
-            $diskImage = Get-DiskImage | Where-Object { 
-                $_.Attached -and ($_ | Get-Volume -ErrorAction SilentlyContinue).DriveLetter -eq $driveLetter 
+            # Check if this is a mounted ISO image by trying to get the partition's backing file
+            # Get all mounted disk images and check if any match this drive letter
+            $diskImage = $null
+            try {
+                # Get all attached disk images
+                $allDiskImages = @(Get-DiskImage -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true })
+                foreach ($img in $allDiskImages) {
+                    try {
+                        $imgVolume = $img | Get-Volume -ErrorAction SilentlyContinue
+                        if ($imgVolume -and $imgVolume.DriveLetter -eq $driveLetter) {
+                            $diskImage = $img
+                            break
+                        }
+                    } catch {
+                        # Skip this image if we can't get its volume
+                        continue
+                    }
+                }
+            } catch {
+                # If Get-DiskImage fails, assume it's a physical drive
+                $diskImage = $null
             }
             
             if ($diskImage -and $diskImage.ImagePath) {
