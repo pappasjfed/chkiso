@@ -354,12 +354,10 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 Write-Host "Detected mounted ISO at drive $($driveLetter): - using source file: $($diskImage.ImagePath)"
                 $ResolvedPath = $diskImage.ImagePath
                 $isDrive = $false  # Treat as a file, not a device
-            } elseif ($isCompiledExe) {
-                # In compiled executable, we can't reliably access drive letters
-                Write-Error "Drive letter access is not supported when using the compiled executable.`nPlease provide the full path to the ISO file instead of the drive letter.`nExample: chkiso.exe 'C:\path\to\file.iso' instead of chkiso.exe 'E:'"
-                exit 1
             } else {
-                # This is a physical CD/DVD drive in regular PowerShell
+                # This is a physical CD/DVD drive (or we're in compiled exe and can't detect)
+                # In ps2exe, we skip Get-DiskImage detection and assume physical drive
+                # FileStream with Win32 device path should work for physical media
                 $isDrive = $true
                 $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
             }
