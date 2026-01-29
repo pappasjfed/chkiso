@@ -57,26 +57,36 @@ param (
     [switch]$Dismount
 )
 
+# --- Error Tracking ---
+# Track if any errors occurred during verification
+$script:hasErrors = $false
+
 # --- Helper Functions ---
 
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
-    if ($IsDrive) {
-        Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
-        $devicePath = "\\.\$DriveLetter`:"
-        $sha = [System.Security.Cryptography.SHA256]::Create()
-        try {
-            $stream = [System.IO.File]::OpenRead($devicePath)
-            $hashBytes = $sha.ComputeHash($stream)
-            return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+    
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    
+    try {
+        if ($IsDrive) {
+            Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
+            $devicePath = "\\.\${DriveLetter}:"
+            # Use FileStream constructor instead of File.OpenRead for Win32 device support
+            $stream = New-Object System.IO.FileStream($devicePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+        } else {
+            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
+            # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
+            $stream = New-Object System.IO.FileStream($TargetPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
         }
-        finally {
-            if ($stream) { $stream.Close() }
-            if ($sha) { $sha.Dispose() }
-        }
-    } else {
-        Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
-        return (Get-FileHash -Path $TargetPath -Algorithm SHA256).Hash.ToLower()
+        
+        $hashBytes = $sha.ComputeHash($stream)
+        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+    }
+    finally {
+        if ($stream) { $stream.Close() }
+        if ($sha) { $sha.Dispose() }
     }
 }
 
@@ -87,15 +97,24 @@ function Verify-PathAgainstHashString {
     $calculatedHash = Get-Sha256FromPath -TargetPath $Path -IsDrive $IsDrive -DriveLetter $DriveLetter
     Write-Host "  - Expected:   $ExpectedHash"
     Write-Host "  - Calculated: $calculatedHash"
-    if ($calculatedHash -eq $ExpectedHash) { Write-Host "Result: SUCCESS - Hashes match." -ForegroundColor Green }
-    else { Write-Host "Result: FAILURE - Hashes DO NOT match." -ForegroundColor Red }
+    if ($calculatedHash -eq $ExpectedHash) { 
+        Write-Host "Result: SUCCESS - Hashes match." -ForegroundColor Green 
+    }
+    else { 
+        Write-Host "Result: FAILURE - Hashes DO NOT match." -ForegroundColor Red 
+        $script:hasErrors = $true
+    }
 }
 
 function Verify-PathAgainstHashFile {
     param ([string]$Path, [string]$HashFilePath, [bool]$IsDrive, [string]$DriveLetter)
     Write-Host "`n--- Verifying Path Against SHA256 Hash File ---" -ForegroundColor Cyan
     try { $HashFileResolved = (Resolve-Path -LiteralPath $HashFilePath.Trim("`"")).Path }
-    catch { Write-Error "Hash file not found: $HashFilePath"; return }
+    catch { 
+        Write-Error "Hash file not found: $HashFilePath"
+        $script:hasErrors = $true
+        return 
+    }
     
     $isoFileNamePattern = if ($IsDrive) { "*.iso" } else { (Get-Item -LiteralPath $Path).Name }
     
@@ -108,7 +127,11 @@ function Verify-PathAgainstHashFile {
         $matchInfo = Get-Content $HashFileResolved | Select-String -Pattern $genericPattern | Select-Object -First 1
     }
 
-    if (-not $matchInfo) { Write-Error "Could not find a valid SHA256 hash entry in the hash file '$HashFileResolved'."; return }
+    if (-not $matchInfo) { 
+        Write-Error "Could not find a valid SHA256 hash entry in the hash file '$HashFileResolved'."
+        $script:hasErrors = $true
+        return 
+    }
     
     $expectedHash = $matchInfo.Matches[0].Groups[1].Value.ToLower()
     Verify-PathAgainstHashString -Path $Path -ExpectedHash $expectedHash -IsDrive $IsDrive -DriveLetter $DriveLetter
@@ -128,7 +151,11 @@ function Verify-Contents {
             Write-Host "Mounting ISO..."
             $diskImage = Mount-DiskImage -ImagePath $Path -PassThru
             $driveLetter = ($diskImage | Get-Volume).DriveLetter
-            if ([string]::IsNullOrWhiteSpace($driveLetter)) { Write-Error "Could not get drive letter."; return }
+            if ([string]::IsNullOrWhiteSpace($driveLetter)) { 
+                Write-Error "Could not get drive letter."
+                $script:hasErrors = $true
+                return 
+            }
             $mountPath = "${driveLetter}:\"
             Write-Host "ISO mounted at: $mountPath" -ForegroundColor Green
             
@@ -159,9 +186,17 @@ function Verify-Contents {
             }
         }
         Write-Host "`n--- Verification Summary ---" -ForegroundColor Cyan
-        if ($failedFiles -eq 0 -and $totalFiles -gt 0) { Write-Host "Success: All $totalFiles files verified." -ForegroundColor Green }
-        else { Write-Host "Failure: $failedFiles out of $totalFiles files failed." -ForegroundColor Red }
-    } catch { Write-Error "An error occurred: $_" }
+        if ($failedFiles -eq 0 -and $totalFiles -gt 0) { 
+            Write-Host "Success: All $totalFiles files verified." -ForegroundColor Green 
+        }
+        else { 
+            Write-Host "Failure: $failedFiles out of $totalFiles files failed." -ForegroundColor Red
+            $script:hasErrors = $true
+        }
+    } catch { 
+        Write-Error "An error occurred: $_"
+        $script:hasErrors = $true
+    }
     # The finally block is removed from here; dismount/eject is handled at the end of the script.
 }
 
@@ -171,12 +206,21 @@ function Verify-ImplantedIsoMd5 {
     $result = Invoke-ImplantedMd5Check -Path $Path -IsDrive $IsDrive -DriveLetter $DriveLetter
     if ($result) {
         if ($result.VerificationMethod -eq 'FIPS_BLOCKED') {
-            Write-Warning "Found implanted MD5 hash: $($result.StoredMD5)"; Write-Warning "Verification blocked by system FIPS security policy."
+            Write-Warning "Found implanted MD5 hash: $($result.StoredMD5)"
+            Write-Warning "Verification blocked by system FIPS security policy."
         } else {
             $result | Format-List
-            if ($result.IsIntegrityOK) { Write-Host "`nSUCCESS: Implanted MD5 is valid." -ForegroundColor Green }
-            else { Write-Warning "`nFAILURE: Implanted MD5 does not match calculated hash." }
+            if ($result.IsIntegrityOK) { 
+                Write-Host "`nSUCCESS: Implanted MD5 is valid." -ForegroundColor Green 
+            }
+            else { 
+                Write-Warning "`nFAILURE: Implanted MD5 does not match calculated hash."
+                $script:hasErrors = $true
+            }
         }
+    } else {
+        # If result is null, an error occurred
+        $script:hasErrors = $true
     }
 }
 
@@ -185,13 +229,18 @@ function Invoke-ImplantedMd5Check {
     $PVD_OFFSET = 32768; $PVD_SIZE = 2048; $APP_USE_OFFSET_IN_PVD = 883; $APP_USE_SIZE = 512; $SECTOR_SIZE = 2048
     $fileStream = $null; $md5 = $null
     try {
-        $streamPath = if ($IsDrive) { "\\.\$DriveLetter`:" } else { $Path }
-        $fileStream = [System.IO.File]::OpenRead($streamPath)
+        $streamPath = if ($IsDrive) { "\\.\${DriveLetter}:" } else { $Path }
+        # Use FileStream constructor instead of File.OpenRead for Win32 device support
+        $fileStream = New-Object System.IO.FileStream($streamPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
         $fileLength = $fileStream.Length
 
         $pvdBlock = New-Object byte[] $PVD_SIZE
         $fileStream.Seek($PVD_OFFSET, [System.IO.SeekOrigin]::Begin) | Out-Null
-        if ($fileStream.Read($pvdBlock, 0, $PVD_SIZE) -ne $PVD_SIZE) { Write-Error "Could not read PVD."; return $null }
+        if ($fileStream.Read($pvdBlock, 0, $PVD_SIZE) -ne $PVD_SIZE) { 
+            Write-Error "Could not read PVD."
+            $script:hasErrors = $true
+            return $null 
+        }
         
         $appUseString = [System.Text.Encoding]::ASCII.GetString($pvdBlock, $APP_USE_OFFSET_IN_PVD, $APP_USE_SIZE)
         $md5Match = [regex]::Match($appUseString, 'ISO MD5SUM = ([0-9a-fA-F]{32})')
@@ -232,7 +281,10 @@ function Invoke-ImplantedMd5Check {
         $md5.TransformFinalBlock(@(), 0, 0) | Out-Null
         $calculatedMd5Hex = [System.BitConverter]::ToString($md5.Hash).Replace("-", "").ToLower()
         return [PSCustomObject]@{ VerificationMethod = "ASCII String (checkisomd5 compatible)"; StoredMD5 = $storedHash; CalculatedMD5 = $calculatedMd5Hex; IsIntegrityOK = $storedHash -eq $calculatedMd5Hex }
-    } catch { Write-Error "An error occurred during check: $_" }
+    } catch { 
+        Write-Error "An error occurred during check: $_"
+        $script:hasErrors = $true
+    }
     finally { if ($fileStream) { $fileStream.Close() }; if ($md5) { $md5.Dispose() } }
     return $null
 }
@@ -252,8 +304,63 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
         if ($volume.DriveType -eq 'CD-ROM') {
-            $isDrive = $true
-            $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
+            # Check if this is a mounted ISO image
+            # Note: In ps2exe (compiled exe), Get-DiskImage without parameters prompts for input
+            # and FileStream can't access Win32 device paths, so we need to handle this differently
+            
+            $diskImage = $null
+            $isCompiledExe = $false
+            
+            # Detect if running in ps2exe compiled executable
+            # ps2exe sets specific environment or the executable name differs from powershell.exe
+            try {
+                $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+                $processName = $currentProcess.ProcessName
+                # If not running as powershell or pwsh, likely a compiled exe
+                if ($processName -notmatch '^(powershell|pwsh)$') {
+                    $isCompiledExe = $true
+                }
+            } catch {
+                # If we can't determine, assume not compiled
+                $isCompiledExe = $false
+            }
+            
+            if (-not $isCompiledExe) {
+                # Only try Get-DiskImage in regular PowerShell, not in compiled exe
+                try {
+                    # Get all attached disk images
+                    $allDiskImages = @(Get-DiskImage -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true })
+                    foreach ($img in $allDiskImages) {
+                        try {
+                            $imgVolume = $img | Get-Volume -ErrorAction SilentlyContinue
+                            if ($imgVolume -and $imgVolume.DriveLetter -eq $driveLetter) {
+                                $diskImage = $img
+                                break
+                            }
+                        } catch {
+                            # Skip this image if we can't get its volume
+                            continue
+                        }
+                    }
+                } catch {
+                    # If Get-DiskImage fails, assume it's a physical drive
+                    $diskImage = $null
+                }
+            }
+            
+            if ($diskImage -and $diskImage.ImagePath) {
+                # This is a mounted ISO - use the ISO file path directly instead of Win32 device path
+                # This avoids ps2exe issues with Win32 device paths on mounted ISOs
+                Write-Host "Detected mounted ISO at drive $($driveLetter): - using source file: $($diskImage.ImagePath)"
+                $ResolvedPath = $diskImage.ImagePath
+                $isDrive = $false  # Treat as a file, not a device
+            } else {
+                # This is a physical CD/DVD drive (or we're in compiled exe and can't detect)
+                # In ps2exe, we skip Get-DiskImage detection and assume physical drive
+                # FileStream with Win32 device path should work for physical media
+                $isDrive = $true
+                $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
+            }
         } else {
             Write-Error "Path '$Path' is a drive, but not a CD/DVD drive."; exit
         }
@@ -309,4 +416,11 @@ if ($PSBoundParameters.ContainsKey('Dismount')) {
             Write-Warning "Skipping dismount: ISO was not mounted during VerifyContents. The script only dismounts ISOs it explicitly mounted."
         }
     }
+}
+
+# Exit with proper code based on whether errors occurred
+if ($script:hasErrors) {
+    exit 1
+} else {
+    exit 0
 }
