@@ -304,27 +304,48 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
         if ($volume.DriveType -eq 'CD-ROM') {
-            # Check if this is a mounted ISO image by trying to get the partition's backing file
-            # Get all mounted disk images and check if any match this drive letter
+            # Check if this is a mounted ISO image
+            # Note: In ps2exe (compiled exe), Get-DiskImage without parameters prompts for input
+            # and FileStream can't access Win32 device paths, so we need to handle this differently
+            
             $diskImage = $null
+            $isCompiledExe = $false
+            
+            # Detect if running in ps2exe compiled executable
+            # ps2exe sets specific environment or the executable name differs from powershell.exe
             try {
-                # Get all attached disk images
-                $allDiskImages = @(Get-DiskImage -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true })
-                foreach ($img in $allDiskImages) {
-                    try {
-                        $imgVolume = $img | Get-Volume -ErrorAction SilentlyContinue
-                        if ($imgVolume -and $imgVolume.DriveLetter -eq $driveLetter) {
-                            $diskImage = $img
-                            break
-                        }
-                    } catch {
-                        # Skip this image if we can't get its volume
-                        continue
-                    }
+                $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+                $processName = $currentProcess.ProcessName
+                # If not running as powershell or pwsh, likely a compiled exe
+                if ($processName -notmatch '^(powershell|pwsh)$') {
+                    $isCompiledExe = $true
                 }
             } catch {
-                # If Get-DiskImage fails, assume it's a physical drive
-                $diskImage = $null
+                # If we can't determine, assume not compiled
+                $isCompiledExe = $false
+            }
+            
+            if (-not $isCompiledExe) {
+                # Only try Get-DiskImage in regular PowerShell, not in compiled exe
+                try {
+                    # Get all attached disk images
+                    $allDiskImages = @(Get-DiskImage -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true })
+                    foreach ($img in $allDiskImages) {
+                        try {
+                            $imgVolume = $img | Get-Volume -ErrorAction SilentlyContinue
+                            if ($imgVolume -and $imgVolume.DriveLetter -eq $driveLetter) {
+                                $diskImage = $img
+                                break
+                            }
+                        } catch {
+                            # Skip this image if we can't get its volume
+                            continue
+                        }
+                    }
+                } catch {
+                    # If Get-DiskImage fails, assume it's a physical drive
+                    $diskImage = $null
+                }
             }
             
             if ($diskImage -and $diskImage.ImagePath) {
@@ -333,8 +354,12 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 Write-Host "Detected mounted ISO at drive $($driveLetter): - using source file: $($diskImage.ImagePath)"
                 $ResolvedPath = $diskImage.ImagePath
                 $isDrive = $false  # Treat as a file, not a device
+            } elseif ($isCompiledExe) {
+                # In compiled executable, we can't reliably access drive letters
+                Write-Error "Drive letter access is not supported when using the compiled executable.`nPlease provide the full path to the ISO file instead of the drive letter.`nExample: chkiso.exe 'C:\path\to\file.iso' instead of chkiso.exe 'E:'"
+                exit 1
             } else {
-                # This is a physical CD/DVD drive
+                # This is a physical CD/DVD drive in regular PowerShell
                 $isDrive = $true
                 $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
             }
