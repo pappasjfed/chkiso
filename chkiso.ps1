@@ -61,23 +61,28 @@ param (
 
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
-    if ($IsDrive) {
-        Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
-        $devicePath = "\\.\${DriveLetter}:"
-        $sha = [System.Security.Cryptography.SHA256]::Create()
-        try {
+    
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    
+    try {
+        if ($IsDrive) {
+            Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
+            $devicePath = "\\.\${DriveLetter}:"
             # Use FileStream constructor instead of File.OpenRead for Win32 device support
             $stream = New-Object System.IO.FileStream($devicePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
-            $hashBytes = $sha.ComputeHash($stream)
-            return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+        } else {
+            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
+            # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
+            $stream = New-Object System.IO.FileStream($TargetPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
         }
-        finally {
-            if ($stream) { $stream.Close() }
-            if ($sha) { $sha.Dispose() }
-        }
-    } else {
-        Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
-        return (Get-FileHash -Path $TargetPath -Algorithm SHA256).Hash.ToLower()
+        
+        $hashBytes = $sha.ComputeHash($stream)
+        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+    }
+    finally {
+        if ($stream) { $stream.Close() }
+        if ($sha) { $sha.Dispose() }
     }
 }
 
