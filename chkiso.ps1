@@ -66,7 +66,8 @@ function Get-Sha256FromPath {
         $devicePath = "\\.\${DriveLetter}:"
         $sha = [System.Security.Cryptography.SHA256]::Create()
         try {
-            $stream = [System.IO.File]::OpenRead($devicePath)
+            # Use FileStream constructor instead of File.OpenRead for Win32 device support
+            $stream = New-Object System.IO.FileStream($devicePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
             $hashBytes = $sha.ComputeHash($stream)
             return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
         }
@@ -186,7 +187,8 @@ function Invoke-ImplantedMd5Check {
     $fileStream = $null; $md5 = $null
     try {
         $streamPath = if ($IsDrive) { "\\.\${DriveLetter}:" } else { $Path }
-        $fileStream = [System.IO.File]::OpenRead($streamPath)
+        # Use FileStream constructor instead of File.OpenRead for Win32 device support
+        $fileStream = New-Object System.IO.FileStream($streamPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
         $fileLength = $fileStream.Length
 
         $pvdBlock = New-Object byte[] $PVD_SIZE
