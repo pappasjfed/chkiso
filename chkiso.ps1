@@ -78,6 +78,28 @@ function Get-Sha256sumPath {
     elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
         return $sha256sumCmd.Source
     }
+    # Check common Git for Windows installation locations
+    else {
+        # Try system-wide Git for Windows installation (64-bit)
+        $gitPath = "C:\Program Files\Git\usr\bin\sha256sum.exe"
+        if (Test-Path $gitPath -ErrorAction SilentlyContinue) {
+            return $gitPath
+        }
+        
+        # Try user-local Git for Windows installation
+        if ($env:LOCALAPPDATA) {
+            $userGitPath = Join-Path $env:LOCALAPPDATA "Programs\Git\usr\bin\sha256sum.exe"
+            if (Test-Path $userGitPath -ErrorAction SilentlyContinue) {
+                return $userGitPath
+            }
+        }
+        
+        # Try 32-bit Git for Windows installation
+        $git32Path = "C:\Program Files (x86)\Git\usr\bin\sha256sum.exe"
+        if (Test-Path $git32Path -ErrorAction SilentlyContinue) {
+            return $git32Path
+        }
+    }
     return $null
 }
 
