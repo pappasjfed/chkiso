@@ -1,6 +1,8 @@
 # What is this?
-[![Test](https://github.com/pappasjfed/chkiso/actions/workflows/test.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/test.yml)
+[![CI](https://github.com/pappasjfed/chkiso/actions/workflows/ci.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/ci.yml)
 [![Build and Release](https://github.com/pappasjfed/chkiso/actions/workflows/build-release.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/build-release.yml)
+[![Security](https://github.com/pappasjfed/chkiso/actions/workflows/security.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/security.yml)
+[![Documentation](https://github.com/pappasjfed/chkiso/actions/workflows/documentation.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/documentation.yml)
 
 This is a project that is used to validate ISO images created by standard DSO pipelines.  It checks hashes for ISOs or media.
 
@@ -56,6 +58,34 @@ The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive lett
 ## Building
 
 The Windows executable is automatically built and attached to releases via GitHub Actions. 
+
+### Automated Build Process
+
+The project uses a comprehensive CI/CD pipeline:
+
+1. **Continuous Integration**: Every commit is linted and tested
+2. **Automated Releases**: Create releases with semantic versioning
+3. **Build & Package**: Executables are automatically compiled and signed
+4. **Security Scanning**: Daily security scans and vulnerability checks
+5. **Documentation**: Auto-generated API documentation
+
+See [.github/workflows/README.md](.github/workflows/README.md) for complete workflow documentation.
+
+### Creating a Release
+
+To create a new release:
+
+1. Go to **Actions** → **Create Release**
+2. Click **Run workflow**
+3. Enter version number (e.g., `1.0.0`, `1.1.0`)
+4. Select if it's a pre-release
+5. Click **Run workflow**
+
+The release will be automatically created with:
+- Compiled executable (chkiso.exe)
+- PowerShell script (chkiso.ps1)
+- SHA256 checksums
+- Auto-generated changelog
 
 ### Code Signing
 

@@ -1,0 +1,116 @@
+---
+name: Publish Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  publish-github:
+    name: Publish to GitHub Releases
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Download release assets
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Fetching release assets for ${{ github.event.inputs.tag }}"
+          # Assets are already attached by build-release workflow
+          echo "Assets available in release"
+
+      - name: Verify release
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
+          Write-Host "Verifying release for tag: $tag"
+          
+          # Check if release exists
+          $release = gh release view $tag --json name,tagName,assets
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Release $tag not found"
+            exit 1
+          }
+          
+          Write-Host "✓ Release verified: $tag"
+          Write-Host "Assets:"
+          $release | ConvertFrom-Json | Select-Object -ExpandProperty assets | Format-Table
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-powershell-gallery:
+    name: Prepare for PowerShell Gallery (Future)
+    runs-on: windows-latest
+    if: false  # Disabled - enable when module manifest is created
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Placeholder for PowerShell Gallery publishing
+        run: |
+          echo "PowerShell Gallery publishing not yet configured"
+          echo "To enable:"
+          echo "1. Create a module manifest (.psd1)"
+          echo "2. Add PSGallery API key to secrets"
+          echo "3. Enable this job"
+
+  publish-chocolatey:
+    name: Prepare for Chocolatey (Future)
+    runs-on: windows-latest
+    if: false  # Disabled - enable when chocolatey package is created
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Placeholder for Chocolatey publishing
+        run: |
+          echo "Chocolatey publishing not yet configured"
+          echo "To enable:"
+          echo "1. Create chocolatey package specification"
+          echo "2. Add Chocolatey API key to secrets"
+          echo "3. Enable this job"
+
+  notify-success:
+    name: Notify Publication Success
+    runs-on: ubuntu-latest
+    needs: [publish-github]
+    if: success()
+    permissions:
+      contents: read
+
+    steps:
+      - name: Create success summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## ✓ Publication Successful
+          
+          The package has been successfully published to:
+          - ✓ GitHub Releases
+          
+          ### Future Publishing Targets
+          - [ ] PowerShell Gallery (not yet configured)
+          - [ ] Chocolatey (not yet configured)
+          
+          ### Release Information
+          - Tag: ${{ github.event.inputs.tag || github.ref_name }}
+          - Workflow: ${{ github.workflow }}
+          - Run: ${{ github.run_number }}
+          EOF

@@ -1,0 +1,183 @@
+---
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'chkiso.ps1'
+      - '.github/workflows/documentation.yml'
+  pull_request:
+    paths:
+      - '**.md'
+      - 'chkiso.ps1'
+  workflow_dispatch:
+
+jobs:
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for broken links in markdown
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
+          config-file: '.github/workflows/markdown-link-check-config.json'
+        continue-on-error: true
+
+      - name: Validate README structure
+        run: |
+          echo "Validating README.md structure..."
+          
+          # Check if README has required sections
+          if ! grep -q "## Usage" README.md; then
+            echo "Warning: README.md missing '## Usage' section"
+          fi
+          
+          if ! grep -q "## Building" README.md; then
+            echo "Warning: README.md missing '## Building' section"
+          fi
+          
+          if ! grep -q "## Testing" README.md; then
+            echo "Warning: README.md missing '## Testing' section"
+          fi
+          
+          echo "✓ README validation complete"
+
+      - name: Check PowerShell documentation
+        shell: pwsh
+        run: |
+          Write-Host "Checking PowerShell help documentation..."
+          
+          # Check if the script has proper help documentation
+          $helpContent = Get-Help ./chkiso.ps1 -Full
+          
+          if ($null -eq $helpContent.Synopsis -or $helpContent.Synopsis -eq '') {
+            Write-Warning "Script missing SYNOPSIS in help documentation"
+          } else {
+            Write-Host "✓ SYNOPSIS found"
+          }
+          
+          if ($null -eq $helpContent.Description -or $helpContent.Description.Length -eq 0) {
+            Write-Warning "Script missing DESCRIPTION in help documentation"
+          } else {
+            Write-Host "✓ DESCRIPTION found"
+          }
+          
+          if ($null -eq $helpContent.Parameters -or $helpContent.Parameters.Count -eq 0) {
+            Write-Warning "Script missing PARAMETER documentation"
+          } else {
+            Write-Host "✓ PARAMETER documentation found ($($helpContent.Parameters.Count) parameters)"
+          }
+          
+          Write-Host "`n✓ PowerShell documentation check complete"
+
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate API documentation
+        shell: pwsh
+        run: |
+          Write-Host "Generating PowerShell help documentation..."
+          
+          # Create docs directory
+          New-Item -ItemType Directory -Force -Path "docs" | Out-Null
+          
+          # Generate help as markdown
+          $help = Get-Help ./chkiso.ps1 -Full
+          
+          $markdown = @"
+          # chkiso PowerShell Script Documentation
+          
+          ## Synopsis
+          $($help.Synopsis)
+          
+          ## Description
+          $($help.Description | ForEach-Object { $_.Text })
+          
+          ## Parameters
+          
+          $($help.Parameters.parameter | ForEach-Object {
+          @"
+          ### -$($_.name)
+          **Type:** $($_.type.name)
+          **Required:** $($_.required)
+          
+          $($_.description | ForEach-Object { $_.Text })
+          
+          "@
+          })
+          
+          ## Examples
+          
+          ``````powershell
+          # Basic usage
+          .\chkiso.ps1 path\to\image.iso
+          
+          # Check against hash
+          .\chkiso.ps1 path\to\image.iso <sha256-hash>
+          
+          # Check against hash file
+          .\chkiso.ps1 path\to\image.iso -ShaFile path\to\hashfile.sha
+          
+          # Enable MD5 check
+          .\chkiso.ps1 path\to\image.iso -MD5
+          
+          # Skip internal verification
+          .\chkiso.ps1 path\to\image.iso -NoVerify
+          ``````
+          
+          ## Notes
+          
+          Generated from PowerShell help documentation on $(Get-Date -Format "yyyy-MM-dd")
+          
+          "@
+          
+          $markdown | Out-File -FilePath "docs/API.md" -Encoding utf8NoBOM
+          Write-Host "✓ Documentation generated at docs/API.md"
+
+      - name: Create documentation index
+        run: |
+          cat > docs/index.md << 'EOF'
+          # chkiso Documentation
+          
+          Welcome to the chkiso documentation!
+          
+          ## Contents
+          
+          - [API Documentation](API.md) - Complete PowerShell script documentation
+          - [README](../README.md) - Main project documentation
+          - [Code Signing](../CODE_SIGNING.md) - Code signing setup guide
+          
+          ## Quick Links
+          
+          - [GitHub Repository](https://github.com/pappasjfed/chkiso)
+          - [Releases](https://github.com/pappasjfed/chkiso/releases)
+          - [Issues](https://github.com/pappasjfed/chkiso/issues)
+          EOF
+          
+          echo "✓ Documentation index created"
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/

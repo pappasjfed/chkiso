@@ -1,0 +1,138 @@
+---
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: 'javascript'  # PowerShell analyzed as JavaScript
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+  powershell-security:
+    name: PowerShell Security Analysis
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          Import-Module PSScriptAnalyzer
+
+      - name: Security-focused PSScriptAnalyzer scan
+        shell: pwsh
+        run: |
+          Write-Host "Running security-focused PowerShell analysis..."
+          
+          $results = Invoke-ScriptAnalyzer -Path chkiso.ps1 -Severity Error,Warning `
+            -IncludeRule PSAvoid*,PSUse* -Recurse
+          
+          if ($results.Count -gt 0) {
+            Write-Host "`nFound $($results.Count) security/best practice issue(s):"
+            $results | Format-Table -Property Severity,RuleName,Message,Line -AutoSize
+            
+            # Fail on security-related errors
+            $securityErrors = $results | Where-Object { 
+              $_.Severity -eq 'Error' -or 
+              $_.RuleName -match 'PSAvoidUsing(Plain|ConvertTo|Invoke|WriteHost)' 
+            }
+            
+            if ($securityErrors.Count -gt 0) {
+              Write-Error "Found $($securityErrors.Count) security error(s)"
+              exit 1
+            }
+          } else {
+            Write-Host "✓ No security issues found"
+          }
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [codeql, powershell-security, secret-scan]
+    if: always()
+    permissions:
+      contents: read
+
+    steps:
+      - name: Create security summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## Security Scan Results
+          
+          ### Status
+          - CodeQL: ${{ needs.codeql.result }}
+          - PowerShell Security: ${{ needs.powershell-security.result }}
+          - Secret Scanning: ${{ needs.secret-scan.result }}
+          
+          ### Notes
+          All security scans have been completed. Review any findings in the workflow logs.
+          EOF

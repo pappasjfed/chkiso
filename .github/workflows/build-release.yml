@@ -16,6 +16,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Get version from tag
+        id: get_version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -match 'refs/tags/v(.+)') {
+            $version = $matches[1]
+            Write-Host "Version from tag: $version"
+          } else {
+            $version = "0.0.0"
+            Write-Host "No tag found, using default version: $version"
+          }
+          
+          # Convert to Windows version format (Major.Minor.Build.Revision)
+          $versionParts = $version -split '\.'
+          $major = $versionParts[0]
+          $minor = if ($versionParts.Length -gt 1) { $versionParts[1] } else { "0" }
+          $build = if ($versionParts.Length -gt 2) { $versionParts[2] -replace '-.*$', '' } else { "0" }
+          $revision = "0"
+          $winVersion = "$major.$minor.$build.$revision"
+          
+          Write-Host "Windows version: $winVersion"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "WIN_VERSION=$winVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Install ps2exe
         shell: pwsh
         run: |
@@ -26,13 +50,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          Write-Host "Compiling with version: $env:WIN_VERSION"
           ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
-            -noConsole:$false -title "chkiso" -version "1.0.0.0" `
-            -company "chkiso" -product "chkiso" -copyright "MIT License"
+            -noConsole:$false -title "chkiso" -version "$env:WIN_VERSION" `
+            -company "chkiso" -product "chkiso" `
+            -copyright "MIT License" -description "ISO validation tool"
           if (-not (Test-Path chkiso.exe)) {
             Write-Error "chkiso.exe was not created"
             exit 1
           }
+          Write-Host "Successfully compiled chkiso.exe with version $env:WIN_VERSION"
 
       - name: Sign executable
         if: vars.CERTHASH != '' && vars.CERTNAME != ''
