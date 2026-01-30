@@ -63,6 +63,40 @@ $script:hasErrors = $false
 
 # --- Helper Functions ---
 
+function Get-Sha256Hash {
+    <#
+    .SYNOPSIS
+        Calculates SHA256 hash of a file using FileStream (ps2exe compatible).
+    .PARAMETER FilePath
+        Path to the file to hash.
+    .PARAMETER Quiet
+        If specified, suppresses the progress message.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$FilePath,
+        [switch]$Quiet
+    )
+    
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    
+    try {
+        if (-not $Quiet) {
+            Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)'..."
+        }
+        # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
+        $stream = New-Object System.IO.FileStream($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+        
+        $hashBytes = $sha.ComputeHash($stream)
+        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+    }
+    finally {
+        if ($stream) { $stream.Close() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
+
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
@@ -179,7 +213,7 @@ function Verify-Contents {
                         Write-Warning "File not found on media: $fileName (referenced in $($checksumFile.Name))"; $failedFiles++; return
                     }
                     Write-Host "Verifying: $fileName" -NoNewline
-                    $calculatedHash = (Get-FileHash -Path $filePathOnMedia -Algorithm SHA256).Hash.ToLower()
+                    $calculatedHash = Get-Sha256Hash -FilePath $filePathOnMedia -Quiet
                     if ($calculatedHash -eq $expectedHash) { Write-Host " -> OK" -ForegroundColor Green }
                     else { Write-Host " -> FAILED" -ForegroundColor Red; $failedFiles++ }
                 }
