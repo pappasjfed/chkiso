@@ -47,6 +47,12 @@ Download the compiled `chkiso.exe` from the [Releases](https://github.com/pappas
 chkiso.exe path\to\image.iso
 ```
 
+**Important**: Due to technical limitations in compiled executables, `chkiso.exe` cannot access mounted ISO files via drive letters (e.g., `E:`). If you have a mounted ISO, either:
+- Use the ISO file path directly: `chkiso.exe C:\path\to\image.iso`
+- Or use the PowerShell script instead: `powershell -File chkiso.ps1 E:`
+
+The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive letters for mounted ISOs or physical media.
+
 ## Building
 
 The Windows executable is automatically built and attached to releases via GitHub Actions. 
