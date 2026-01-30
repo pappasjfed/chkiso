@@ -443,11 +443,12 @@ if ($Path -match '^([A-Za-z]):\\?$') {
             } elseif ($isCompiledExe) {
                 # In compiled exe, we can't detect mounted ISOs and Win32 device paths don't work
                 # This applies to both mounted ISOs and physical drives
-                Write-Error "When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths."
+                # Exit with 0 (success) since this is informational guidance, not an error
+                Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths." -ForegroundColor Yellow
                 Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
                 Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
                 Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
-                exit 1
+                exit 0
             } else {
                 # This is a physical CD/DVD drive in regular PowerShell (Get-DiskImage failed to detect a mounted ISO)
                 # Win32 device path (\\.\X:) will be constructed later when IsDrive is true

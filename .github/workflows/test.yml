@@ -176,18 +176,18 @@ jobs:
             
             # Note: The compiled exe (chkiso.exe) cannot access any drive letters (mounted ISOs or physical drives)
             # due to ps2exe limitations with Win32 device paths. Users should use the ISO file path directly.
-            # We test that the exe shows an appropriate error message for this scenario.
-            Write-Host "`nVerifying that chkiso.exe shows error for drive letter access..."
+            # The exe provides helpful guidance and exits with code 0 (success) for this informational message.
+            Write-Host "`nVerifying that chkiso.exe shows guidance message for drive letter access..."
             $output = .\chkiso.exe "$driveLetter`:" 2>&1 | Out-String
-            if ($LASTEXITCODE -eq 0) {
-              Write-Error "Expected chkiso.exe to fail with drive letter, but it succeeded"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Expected chkiso.exe to exit with code 0 (informational), but got exit code: $LASTEXITCODE"
               exit 1
             }
             if ($output -notmatch "drive letters.*are not supported") {
-              Write-Error "Expected error message about drive letters not being supported, but got: $output"
+              Write-Error "Expected guidance message about drive letters not being supported, but got: $output"
               exit 1
             }
-            Write-Host "Confirmed: chkiso.exe correctly rejects drive letter access with helpful error message"
+            Write-Host "Confirmed: chkiso.exe provides helpful guidance for drive letter access (exit code 0)"
 
           } finally {
             Write-Host "`nDismounting ISO..."
