@@ -13,14 +13,6 @@ output/
 **/*group*/
 **/*chunk*/
 
-# Ignore Repositories
-**/rhel-*-for-x86_64-*-rpms/
-**/codeready-builder-for-rhel-*-x86_64-rpms/
-**/epel*/
-**/microsoft*/
-**/docker-ce-*/
-**/hashicorp/
-
 # Ignore Files
 *.tgz
 *.gz
@@ -32,8 +24,6 @@ output/
 *.sha
 *iso.txt
 *iso.sha
-*.dxp
 *.exe
 
-**/docker-ce-*/
-desktop.ini
+*/desktop.ini
