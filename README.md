@@ -21,11 +21,13 @@ By default, the script:
 ```powershell
 .\chkiso.ps1 path\to\image.iso <sha256-hash>
 ```
+**Note**: Content verification runs by default. Use `-NoVerify` to skip it.
 
 #### Check against a hash file:
 ```powershell
 .\chkiso.ps1 path\to\image.iso -ShaFile path\to\hashfile.sha
 ```
+**Note**: Content verification runs by default. Use `-NoVerify` to skip it.
 
 #### Enable implanted MD5 check:
 ```powershell

@@ -214,8 +214,9 @@ function Verify-ImplantedIsoMd5 {
     }
     else {
         # Check if it's in PATH
-        $checkisomd5Path = (Get-Command checkisomd5.exe -ErrorAction SilentlyContinue)?.Source
-        if ($checkisomd5Path) {
+        $checkisomd5Cmd = Get-Command checkisomd5.exe -ErrorAction SilentlyContinue
+        if ($checkisomd5Cmd) {
+            $checkisomd5Path = $checkisomd5Cmd.Source
             Write-Host "Found checkisomd5.exe in PATH: $checkisomd5Path" -ForegroundColor Green
         }
     }
@@ -224,11 +225,19 @@ function Verify-ImplantedIsoMd5 {
     if ($checkisomd5Path) {
         Write-Host "Using external checkisomd5.exe to avoid FIPS restrictions..."
         try {
+            # Verify the executable is accessible
+            if (-not (Test-Path $checkisomd5Path -PathType Leaf)) {
+                throw "checkisomd5.exe path is not accessible"
+            }
+            
             $targetPath = if ($IsDrive) { "\\.\${DriveLetter}:" } else { $Path }
             $output = & $checkisomd5Path $targetPath 2>&1
             $exitCode = $LASTEXITCODE
             
-            Write-Host $output
+            # Display output properly
+            if ($output) {
+                $output | ForEach-Object { Write-Host $_ }
+            }
             
             if ($exitCode -eq 0) {
                 Write-Host "`nSUCCESS: Implanted MD5 is valid (verified with checkisomd5.exe)." -ForegroundColor Green
