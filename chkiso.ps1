@@ -416,7 +416,8 @@ if ($Path -match '^([A-Za-z]):\\?$') {
             
             if ($diskImage -and $diskImage.ImagePath) {
                 # This is a mounted ISO - use the ISO file path directly instead of Win32 device path
-                # This avoids potential issues with Win32 device paths on mounted ISOs
+                # Using the source file path is more reliable and avoids potential issues with accessing
+                # mounted ISOs through Win32 device paths (\\.\X:) in some environments
                 Write-Host "Detected mounted ISO at drive $($driveLetter): - using source file: $($diskImage.ImagePath)"
                 $ResolvedPath = $diskImage.ImagePath
                 $isDrive = $false  # Treat as a file, not a device
