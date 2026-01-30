@@ -1,0 +1,606 @@
+package main
+
+import (
+	"bufio"
+	"crypto/md5"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
+)
+
+const (
+	PVD_OFFSET          = 32768
+	PVD_SIZE            = 2048
+	APP_USE_OFFSET      = 883
+	APP_USE_SIZE        = 512
+	SECTOR_SIZE         = 2048
+	VERSION             = "2.0.0"
+)
+
+var (
+	hasErrors = false
+)
+
+type Config struct {
+	Path        string
+	Sha256Hash  string
+	ShaFile     string
+	NoVerify    bool
+	MD5Check    bool
+	Dismount    bool
+	isDrive     bool
+	driveLetter string
+}
+
+func main() {
+	config := parseFlags()
+	
+	// Validate and resolve the path
+	if err := validatePath(config); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Execute checks based on provided parameters
+	if config.ShaFile != "" {
+		verifyPathAgainstHashFile(config)
+	}
+	if config.Sha256Hash != "" {
+		verifyPathAgainstHashString(config)
+	}
+	// If neither Sha256Hash nor ShaFile is provided, display SHA256 for informational purposes
+	if config.Sha256Hash == "" && config.ShaFile == "" {
+		displaySha256Hash(config)
+	}
+	if config.MD5Check {
+		verifyImplantedMD5(config)
+	}
+	// Run VerifyContents by default unless -NoVerify is specified
+	if !config.NoVerify {
+		verifyContents(config)
+	}
+	
+	if config.Dismount {
+		handleDismount(config)
+	}
+	
+	// Exit with proper code based on whether errors occurred
+	if hasErrors {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func parseFlags() *Config {
+	config := &Config{}
+	
+	// Manual argument parsing for better flexibility
+	var args []string
+	i := 1
+	for i < len(os.Args) {
+		arg := os.Args[i]
+		
+		switch {
+		case arg == "-version" || arg == "--version":
+			fmt.Printf("chkiso version %s\n", VERSION)
+			fmt.Printf("Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+			os.Exit(0)
+		case arg == "-help" || arg == "--help" || arg == "-h":
+			printUsage()
+			os.Exit(0)
+		case arg == "-sha256" || arg == "--sha256" || arg == "-sha256sum" || arg == "--sha256sum" || arg == "-sha" || arg == "--sha":
+			if i+1 < len(os.Args) {
+				config.Sha256Hash = os.Args[i+1]
+				i += 2
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %s requires an argument\n", arg)
+				os.Exit(1)
+			}
+		case arg == "-shafile" || arg == "--shafile":
+			if i+1 < len(os.Args) {
+				config.ShaFile = os.Args[i+1]
+				i += 2
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %s requires an argument\n", arg)
+				os.Exit(1)
+			}
+		case arg == "-noverify" || arg == "--noverify":
+			config.NoVerify = true
+			i++
+		case arg == "-md5" || arg == "--md5":
+			config.MD5Check = true
+			i++
+		case arg == "-dismount" || arg == "--dismount" || arg == "-eject" || arg == "--eject":
+			config.Dismount = true
+			i++
+		default:
+			// Positional argument
+			args = append(args, arg)
+			i++
+		}
+	}
+	
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "Error: path argument is required\n\n")
+		printUsage()
+		os.Exit(1)
+	}
+	
+	config.Path = args[0]
+	
+	// Support positional sha256 hash (second argument)
+	if len(args) >= 2 && config.Sha256Hash == "" {
+		config.Sha256Hash = args[1]
+	}
+	
+	return config
+}
+
+func printUsage() {
+	fmt.Fprintf(os.Stderr, "chkiso - ISO/Drive Verification Tool v%s\n\n", VERSION)
+	fmt.Fprintf(os.Stderr, "Usage: chkiso [options] <path> [sha256-hash]\n\n")
+	fmt.Fprintf(os.Stderr, "Arguments:\n")
+	fmt.Fprintf(os.Stderr, "  path          Path to ISO file or drive letter (e.g., /path/to/image.iso or E:)\n")
+	fmt.Fprintf(os.Stderr, "  sha256-hash   Optional SHA256 hash for verification (positional)\n\n")
+	fmt.Fprintf(os.Stderr, "Options:\n")
+	fmt.Fprintf(os.Stderr, "  -sha256 <hash>      Expected SHA256 hash for verification\n")
+	fmt.Fprintf(os.Stderr, "  -sha256sum <hash>   Alias for -sha256\n")
+	fmt.Fprintf(os.Stderr, "  -sha <hash>         Alias for -sha256\n")
+	fmt.Fprintf(os.Stderr, "  -shafile <file>     Path to SHA256 hash file\n")
+	fmt.Fprintf(os.Stderr, "  -noverify           Skip verifying internal file hashes\n")
+	fmt.Fprintf(os.Stderr, "  -md5                Enable implanted MD5 check\n")
+	fmt.Fprintf(os.Stderr, "  -dismount           Dismount/eject after verification\n")
+	fmt.Fprintf(os.Stderr, "  -eject              Alias for -dismount\n")
+	fmt.Fprintf(os.Stderr, "  -version            Display version information\n")
+	fmt.Fprintf(os.Stderr, "  -help               Display this help information\n")
+	fmt.Fprintf(os.Stderr, "\nExamples:\n")
+	fmt.Fprintf(os.Stderr, "  chkiso image.iso\n")
+	fmt.Fprintf(os.Stderr, "  chkiso image.iso <hash>\n")
+	fmt.Fprintf(os.Stderr, "  chkiso -sha256 <hash> image.iso\n")
+	fmt.Fprintf(os.Stderr, "  chkiso -shafile hashes.sha image.iso\n")
+	fmt.Fprintf(os.Stderr, "  chkiso -md5 image.iso\n")
+	fmt.Fprintf(os.Stderr, "  chkiso -noverify E:\n")
+}
+
+func validatePath(config *Config) error {
+	// Check if it's a drive letter (Windows style: E: or E:\)
+	if runtime.GOOS == "windows" {
+		drivePattern := regexp.MustCompile(`^([A-Za-z]):\\?$`)
+		if matches := drivePattern.FindStringSubmatch(config.Path); matches != nil {
+			config.isDrive = true
+			config.driveLetter = strings.ToUpper(matches[1])
+			// On Windows, we'll construct the device path later
+			return nil
+		}
+	}
+	
+	// Otherwise, treat as file path
+	info, err := os.Stat(config.Path)
+	if err != nil {
+		return fmt.Errorf("file not found: %s", config.Path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("path is a directory, not a file: %s", config.Path)
+	}
+	
+	// Resolve to absolute path
+	absPath, err := filepath.Abs(config.Path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path: %v", err)
+	}
+	config.Path = absPath
+	
+	return nil
+}
+
+func getSha256Hash(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func getSha256FromPath(config *Config) (string, error) {
+	var reader io.Reader
+	var file *os.File
+	var err error
+	
+	if config.isDrive {
+		fmt.Printf("Calculating SHA256 hash for drive '%s:' (this can be slow)...\n", config.driveLetter)
+		// On Windows, use device path
+		if runtime.GOOS == "windows" {
+			devicePath := fmt.Sprintf("\\\\.\\%s:", config.driveLetter)
+			file, err = os.Open(devicePath)
+		} else {
+			return "", fmt.Errorf("drive letters are only supported on Windows")
+		}
+	} else {
+		fmt.Printf("Calculating SHA256 hash for file '%s'...\n", filepath.Base(config.Path))
+		file, err = os.Open(config.Path)
+	}
+	
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	
+	reader = file
+	hash := sha256.New()
+	if _, err := io.Copy(hash, reader); err != nil {
+		return "", err
+	}
+	
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func verifyPathAgainstHashString(config *Config) {
+	fmt.Println("\n--- Verifying Path Against Provided SHA256 Hash ---")
+	expectedHash := strings.ToLower(strings.TrimSpace(config.Sha256Hash))
+	calculatedHash, err := getSha256FromPath(config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error calculating hash: %v\n", err)
+		hasErrors = true
+		return
+	}
+	calculatedHash = strings.ToLower(calculatedHash)
+	
+	fmt.Printf("  - Expected:   %s\n", expectedHash)
+	fmt.Printf("  - Calculated: %s\n", calculatedHash)
+	
+	if calculatedHash == expectedHash {
+		fmt.Println("\033[32mResult: SUCCESS - Hashes match.\033[0m")
+	} else {
+		fmt.Println("\033[31mResult: FAILURE - Hashes DO NOT match.\033[0m")
+		hasErrors = true
+	}
+}
+
+func verifyPathAgainstHashFile(config *Config) {
+	fmt.Println("\n--- Verifying Path Against SHA256 Hash File ---")
+	
+	content, err := os.ReadFile(config.ShaFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading hash file: %v\n", err)
+		hasErrors = true
+		return
+	}
+	
+	// Determine the filename pattern to search for
+	var isoFileNamePattern string
+	if config.isDrive {
+		isoFileNamePattern = ".*\\.iso"
+	} else {
+		isoFileNamePattern = regexp.QuoteMeta(filepath.Base(config.Path))
+	}
+	
+	// Try to find a hash entry matching the filename
+	pattern := fmt.Sprintf(`^([a-fA-F0-9]{64})\s+\*?\s*%s`, isoFileNamePattern)
+	re := regexp.MustCompile(pattern)
+	genericPattern := regexp.MustCompile(`^([a-fA-F0-9]{64})\s+\*?\s*.*`)
+	
+	lines := strings.Split(string(content), "\n")
+	var expectedHash string
+	
+	for _, line := range lines {
+		if matches := re.FindStringSubmatch(line); matches != nil {
+			expectedHash = strings.ToLower(matches[1])
+			break
+		}
+	}
+	
+	// If no specific match, try generic pattern (first hash in file)
+	if expectedHash == "" {
+		for _, line := range lines {
+			if matches := genericPattern.FindStringSubmatch(line); matches != nil {
+				expectedHash = strings.ToLower(matches[1])
+				break
+			}
+		}
+	}
+	
+	if expectedHash == "" {
+		fmt.Fprintf(os.Stderr, "Error: Could not find a valid SHA256 hash entry in the hash file '%s'\n", config.ShaFile)
+		hasErrors = true
+		return
+	}
+	
+	config.Sha256Hash = expectedHash
+	verifyPathAgainstHashString(config)
+}
+
+func displaySha256Hash(config *Config) {
+	fmt.Println("\n--- SHA256 Hash (Informational) ---")
+	calculatedHash, err := getSha256FromPath(config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error calculating hash: %v\n", err)
+		hasErrors = true
+		return
+	}
+	fmt.Printf("\033[33mSHA256: %s\033[0m\n", strings.ToLower(calculatedHash))
+}
+
+func verifyContents(config *Config) {
+	fmt.Println("\n--- Verifying Contents ---")
+	
+	var mountPath string
+	var needsUnmount bool
+	
+	if config.isDrive {
+		if runtime.GOOS == "windows" {
+			mountPath = fmt.Sprintf("%s:\\", config.driveLetter)
+			fmt.Printf("Verifying contents of physical drive at: %s\n", mountPath)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: Drive verification is only supported on Windows\n")
+			hasErrors = true
+			return
+		}
+	} else {
+		// For ISO files, we need to mount them
+		// This is platform-specific and complex, so for now we'll skip auto-mounting
+		// Users can manually mount and provide the mount point
+		fmt.Println("Note: For ISO files, please mount the ISO manually and verify using the mount point.")
+		fmt.Println("Example (Windows): Mount-DiskImage image.iso, then run: chkiso E:")
+		fmt.Println("Example (Linux): sudo mount -o loop image.iso /mnt, then run: chkiso /mnt")
+		return
+	}
+	
+	// Find checksum files
+	checksumFiles, err := findChecksumFiles(mountPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Error finding checksum files: %v\n", err)
+		return
+	}
+	
+	if len(checksumFiles) == 0 {
+		fmt.Println("Warning: Could not find any checksum files (*.sha, sha256sum.txt, SHA256SUMS) on the media.")
+		return
+	}
+	
+	totalFiles := 0
+	failedFiles := 0
+	
+	for _, checksumFile := range checksumFiles {
+		fmt.Printf("\nProcessing checksum file: %s\n", checksumFile)
+		baseDir := filepath.Dir(checksumFile)
+		
+		file, err := os.Open(checksumFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Could not open checksum file: %v\n", err)
+			continue
+		}
+		
+		scanner := bufio.NewScanner(file)
+		pattern := regexp.MustCompile(`^([a-fA-F0-9]{64})\s+[\*\.\/\\]*(.*)`)
+		
+		for scanner.Scan() {
+			line := scanner.Text()
+			matches := pattern.FindStringSubmatch(line)
+			if matches == nil {
+				continue
+			}
+			
+			totalFiles++
+			expectedHash := strings.ToLower(matches[1])
+			fileName := strings.TrimSpace(matches[2])
+			
+			filePathOnMedia := filepath.Join(baseDir, fileName)
+			if _, err := os.Stat(filePathOnMedia); os.IsNotExist(err) {
+				fmt.Printf("Warning: File not found on media: %s (referenced in %s)\n", fileName, filepath.Base(checksumFile))
+				failedFiles++
+				continue
+			}
+			
+			fmt.Printf("Verifying: %s", fileName)
+			calculatedHash, err := getSha256Hash(filePathOnMedia)
+			if err != nil {
+				fmt.Printf(" -> \033[31mERROR: %v\033[0m\n", err)
+				failedFiles++
+				continue
+			}
+			
+			calculatedHash = strings.ToLower(calculatedHash)
+			if calculatedHash == expectedHash {
+				fmt.Printf(" -> \033[32mOK\033[0m\n")
+			} else {
+				fmt.Printf(" -> \033[31mFAILED\033[0m\n")
+				failedFiles++
+			}
+		}
+		
+		file.Close()
+	}
+	
+	fmt.Println("\n--- Verification Summary ---")
+	if failedFiles == 0 && totalFiles > 0 {
+		fmt.Printf("\033[32mSuccess: All %d files verified.\033[0m\n", totalFiles)
+	} else if totalFiles == 0 {
+		fmt.Println("No files were verified.")
+	} else {
+		fmt.Printf("\033[31mFailure: %d out of %d files failed.\033[0m\n", failedFiles, totalFiles)
+		hasErrors = true
+	}
+	
+	if needsUnmount {
+		// Cleanup mount if we mounted it
+	}
+}
+
+func findChecksumFiles(rootPath string) ([]string, error) {
+	var checksumFiles []string
+	
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip files we can't access
+		}
+		if info.IsDir() {
+			return nil
+		}
+		
+		name := strings.ToLower(info.Name())
+		if strings.HasSuffix(name, ".sha") || 
+		   name == "sha256sum.txt" || 
+		   name == "sha256sums" {
+			checksumFiles = append(checksumFiles, path)
+		}
+		
+		return nil
+	})
+	
+	return checksumFiles, err
+}
+
+func verifyImplantedMD5(config *Config) {
+	fmt.Println("\n--- Verifying Implanted ISO MD5 (checkisomd5 compatible) ---")
+	
+	result, err := checkImplantedMD5(config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error during MD5 check: %v\n", err)
+		hasErrors = true
+		return
+	}
+	
+	if result == nil {
+		fmt.Println("Warning: No 'ISO MD5SUM' signature found.")
+		return
+	}
+	
+	fmt.Printf("Verification Method: %s\n", result.VerificationMethod)
+	fmt.Printf("Stored MD5:          %s\n", result.StoredMD5)
+	fmt.Printf("Calculated MD5:      %s\n", result.CalculatedMD5)
+	
+	if result.IsIntegrityOK {
+		fmt.Println("\n\033[32mSUCCESS: Implanted MD5 is valid.\033[0m")
+	} else {
+		fmt.Println("\n\033[31mFAILURE: Implanted MD5 does not match calculated hash.\033[0m")
+		hasErrors = true
+	}
+}
+
+type MD5Result struct {
+	VerificationMethod string
+	StoredMD5          string
+	CalculatedMD5      string
+	IsIntegrityOK      bool
+}
+
+func checkImplantedMD5(config *Config) (*MD5Result, error) {
+	var file *os.File
+	var err error
+	
+	if config.isDrive {
+		if runtime.GOOS == "windows" {
+			devicePath := fmt.Sprintf("\\\\.\\%s:", config.driveLetter)
+			file, err = os.Open(devicePath)
+		} else {
+			return nil, fmt.Errorf("drive letters are only supported on Windows")
+		}
+	} else {
+		file, err = os.Open(config.Path)
+	}
+	
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	
+	// Get file/drive length
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	fileLength := fileInfo.Size()
+	
+	// Read PVD block
+	pvdBlock := make([]byte, PVD_SIZE)
+	if _, err := file.Seek(PVD_OFFSET, 0); err != nil {
+		return nil, err
+	}
+	if n, err := file.Read(pvdBlock); err != nil || n != PVD_SIZE {
+		return nil, fmt.Errorf("could not read PVD")
+	}
+	
+	// Extract Application Use field
+	appUseData := pvdBlock[APP_USE_OFFSET : APP_USE_OFFSET+APP_USE_SIZE]
+	appUseString := string(appUseData)
+	
+	// Look for MD5 signature
+	md5Pattern := regexp.MustCompile(`ISO MD5SUM = ([0-9a-fA-F]{32})`)
+	matches := md5Pattern.FindStringSubmatch(appUseString)
+	if matches == nil {
+		return nil, nil
+	}
+	
+	storedHash := strings.ToLower(matches[1])
+	
+	// Look for SKIPSECTORS
+	skipSectors := 0
+	skipPattern := regexp.MustCompile(`SKIPSECTORS\s*=\s*(\d+)`)
+	if skipMatches := skipPattern.FindStringSubmatch(appUseString); skipMatches != nil {
+		fmt.Sscanf(skipMatches[1], "%d", &skipSectors)
+	}
+	
+	hashEndOffset := fileLength - int64(skipSectors*SECTOR_SIZE)
+	
+	// Create neutralized PVD (fill Application Use field with spaces)
+	neutralizedPvd := make([]byte, len(pvdBlock))
+	copy(neutralizedPvd, pvdBlock)
+	for i := 0; i < APP_USE_SIZE; i++ {
+		neutralizedPvd[APP_USE_OFFSET+i] = 0x20 // space character
+	}
+	
+	// Calculate MD5 hash
+	hash := md5.New()
+	
+	// Part A: Read from start to PVD_OFFSET
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	if _, err := io.CopyN(hash, file, PVD_OFFSET); err != nil {
+		return nil, err
+	}
+	
+	// Part B: Add neutralized PVD
+	hash.Write(neutralizedPvd)
+	
+	// Part C: Read from after PVD to hashEndOffset
+	if _, err := file.Seek(PVD_OFFSET+PVD_SIZE, 0); err != nil {
+		return nil, err
+	}
+	remaining := hashEndOffset - (PVD_OFFSET + PVD_SIZE)
+	if _, err := io.CopyN(hash, file, remaining); err != nil {
+		return nil, err
+	}
+	
+	calculatedMD5 := hex.EncodeToString(hash.Sum(nil))
+	
+	return &MD5Result{
+		VerificationMethod: "ASCII String (checkisomd5 compatible)",
+		StoredMD5:          storedHash,
+		CalculatedMD5:      strings.ToLower(calculatedMD5),
+		IsIntegrityOK:      storedHash == strings.ToLower(calculatedMD5),
+	}, nil
+}
+
+func handleDismount(config *Config) {
+	if config.isDrive {
+		fmt.Printf("\nNote: Ejecting drives is not yet implemented in this version.\n")
+		fmt.Printf("Please eject drive %s: manually.\n", config.driveLetter)
+	} else {
+		fmt.Printf("\nNote: Dismounting ISOs is not yet implemented in this version.\n")
+		fmt.Printf("Please dismount %s manually.\n", config.Path)
+	}
+}
