@@ -1,39 +1,38 @@
-# What is this?
-[![Test](https://github.com/pappasjfed/chkiso/actions/workflows/test.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/test.yml)
+# chkiso - ISO/Drive Verification Tool
+
 [![Build Go Binary](https://github.com/pappasjfed/chkiso/actions/workflows/build-go.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/build-go.yml)
-[![Build and Release](https://github.com/pappasjfed/chkiso/actions/workflows/build-release.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/build-release.yml)
+[![Release](https://github.com/pappasjfed/chkiso/actions/workflows/release.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/release.yml)
 
-This is a project that is used to validate ISO images created by standard DSO pipelines. It checks hashes for ISOs or media.
+A cross-platform tool for validating ISO images and optical media. Written in Go for maximum portability and reliability.
 
-**New in v2.0**: chkiso is now available in **Go** for true cross-platform support! The Go version:
-- ✅ Works on Windows, Linux, macOS, and FreeBSD
-- ✅ No FIPS restrictions on MD5 hashing
-- ✅ Single statically-linked executable (no runtime dependencies)
-- ✅ Can run on locked-down systems that block PowerShell scripts
-- ✅ Native drive access support on all platforms
-- ✅ Same command-line interface as PowerShell version
+## Features
 
-The PowerShell version is still maintained for Windows users who prefer it.
-
-**📖 Migrating from PowerShell?** See the [Migration Guide](MIGRATION.md) for details.
+- ✅ **Cross-platform**: Works on Windows, Linux, macOS, and FreeBSD
+- ✅ **No FIPS restrictions**: MD5 hashing works everywhere (no policy blocks)
+- ✅ **Single executable**: Statically-linked binary with no dependencies
+- ✅ **Multiple verification methods**:
+  - SHA256 hash verification
+  - MD5 implanted hash check (checkisomd5 compatible)
+  - External hash file verification
+  - Content verification against embedded checksums
 
 ## Installation
 
-### Option 1: Download Pre-built Binary (Recommended)
+### Download Pre-built Binary (Recommended)
 
 Download the appropriate binary for your platform from the [Releases](https://github.com/pappasjfed/chkiso/releases) page:
 
-- **Windows**: `chkiso-windows-amd64.exe` (64-bit) or `chkiso-windows-386.exe` (32-bit)
-- **Linux**: `chkiso-linux-amd64` (64-bit), `chkiso-linux-arm64` (ARM 64-bit), etc.
+- **Windows**: `chkiso-windows-amd64.exe` (64-bit), `chkiso-windows-386.exe` (32-bit), or `chkiso-windows-arm64.exe` (ARM)
+- **Linux**: `chkiso-linux-amd64` (64-bit), `chkiso-linux-arm64` (ARM 64-bit), `chkiso-linux-arm` (ARM 32-bit), or `chkiso-linux-386` (32-bit)
 - **macOS**: `chkiso-darwin-amd64` (Intel) or `chkiso-darwin-arm64` (Apple Silicon)
 - **FreeBSD**: `chkiso-freebsd-amd64`
 
-On Linux/macOS, make the binary executable:
+On Linux/macOS/FreeBSD, make the binary executable:
 ```bash
-chmod +x chkiso-linux-amd64
+chmod +x chkiso-*
 ```
 
-### Option 2: Build from Source
+### Build from Source
 
 Requirements: [Go 1.21+](https://golang.org/dl/)
 
@@ -52,37 +51,19 @@ make linux           # Build for Linux
 make macos           # Build for macOS
 ```
 
-### Option 3: PowerShell Script (Windows Only)
-
-If you prefer PowerShell or need drive letter support on Windows with ps2exe:
-
-```powershell
-.\chkiso.ps1 path\to\image.iso
-```
-
 ## Usage
-
-The command-line interface is consistent across both Go and PowerShell versions.
 
 ### Basic Usage
 
-By default, chkiso:
-- Displays the SHA256 hash of the ISO/drive
-- Verifies internal file integrity against embedded checksum files (*.sha, sha256sum.txt)
+By default, chkiso displays the SHA256 hash of the ISO/drive and verifies internal file integrity:
 
-**Go version:**
 ```bash
 chkiso path/to/image.iso
 ```
 
-**PowerShell version:**
-```powershell
-.\chkiso.ps1 path\to\image.iso
-```
-
 ### Advanced Options
 
-#### Check against an expected SHA256 hash:
+#### Verify against an expected SHA256 hash:
 
 ```bash
 # Positional argument
@@ -94,19 +75,19 @@ chkiso -sha256 <sha256-hash> image.iso
 
 **Note**: Content verification runs by default. Use `-noverify` to skip it.
 
-#### Check against a hash file:
+#### Verify against a hash file:
 
 ```bash
 chkiso image.iso -shafile path/to/hashfile.sha
 ```
 
-#### Enable implanted MD5 check:
+#### Check implanted MD5 hash:
 
 ```bash
 chkiso image.iso -md5
 ```
 
-**Go version advantage**: No FIPS restrictions! The Go version can always verify MD5 hashes, unlike PowerShell which may be blocked by FIPS security policies.
+**Advantage**: No FIPS restrictions! Works on all systems regardless of security policies.
 
 #### Skip internal file verification:
 
@@ -114,14 +95,10 @@ chkiso image.iso -md5
 chkiso image.iso -noverify
 ```
 
-#### Verify a physical drive (Windows):
+#### Verify a drive (Windows):
 
 ```bash
-# Go version (Windows)
 chkiso E:
-
-# PowerShell version (Windows)
-.\chkiso.ps1 E:
 ```
 
 #### All options:
@@ -140,26 +117,28 @@ Options:
   -help               Display help information
 ```
 
-## Why Go Instead of PowerShell?
+### Examples
 
-The original PowerShell version faced several limitations:
+```bash
+# Display SHA256 hash
+chkiso ubuntu-22.04-desktop-amd64.iso
 
-1. **FIPS Restrictions**: MD5 hashing is blocked on FIPS-compliant systems
-2. **Locked-down Environments**: Many enterprise systems block `.ps1` script execution
-3. **Platform Limitations**: PowerShell is primarily Windows-centric
-4. **Drive Access**: ps2exe (PowerShell to EXE compiler) cannot access drive letters
-5. **Dependencies**: Requires PowerShell runtime
+# Verify against known hash
+chkiso ubuntu-22.04-desktop-amd64.iso a4acfda10b18da50e2ec50ccaf860d7f20b389df8765611142305c0e911d16fd
 
-The **Go version solves all these issues**:
-- ✅ No FIPS restrictions - MD5 works everywhere
-- ✅ Single static binary - runs on locked-down systems
-- ✅ True cross-platform - Windows, Linux, macOS, FreeBSD
-- ✅ Native drive access - no Win32 API limitations
-- ✅ Zero dependencies - just one executable
+# Verify using hash file
+chkiso ubuntu-22.04-desktop-amd64.iso -shafile SHA256SUMS
+
+# Check implanted MD5 and verify contents
+chkiso rhel-9.0-x86_64-dvd.iso -md5
+
+# Quick hash check without content verification
+chkiso image.iso <hash> -noverify
+```
 
 ## Building
 
-### Go Version
+### Go Binary
 
 The Go binaries are automatically built for multiple platforms via GitHub Actions.
 
@@ -182,29 +161,11 @@ make linux        # Linux binaries
 make macos        # macOS binaries
 ```
 
-### PowerShell Version
-
-The PowerShell executable is built using ps2exe:
-
-1. Install ps2exe: `Install-Module -Name ps2exe -Force`
-2. Compile: 
-   ```powershell
-   ps2exe -inputFile chkiso.ps1 -outputFile chkiso-ps.exe `
-     -noConsole:$false -title "chkiso" -version "1.0.0.0" `
-     -company "chkiso" -product "chkiso" -copyright "MIT License"
-   ```
-
-**Important**: The ps2exe version (`chkiso-ps.exe`) cannot access drive letters due to Win32 device path limitations. Use the PowerShell script directly or the Go version for drive letter support.
-
-### Code Signing
-
-The PowerShell executable can be automatically signed if code signing certificates are configured. See [CODE_SIGNING.md](CODE_SIGNING.md) for setup instructions.
-
 ## Testing
 
-Tests run automatically on pull requests and pushes to main. The test suite validates both Go and PowerShell versions against `test/test.iso` using multiple verification methods.
+Tests run automatically on pull requests and pushes to main. The test suite validates the Go implementation against `test/test.iso` using multiple verification methods.
 
-Run Go tests locally:
+Run tests locally:
 ```bash
 go test -v ./...
 ```
@@ -217,6 +178,16 @@ go test -v ./...
 | Linux    | amd64, 386, arm, arm64 | ✅ Fully supported |
 | macOS    | amd64 (Intel), arm64 (Apple Silicon) | ✅ Fully supported |
 | FreeBSD  | amd64 | ✅ Fully supported |
+
+## Why Go?
+
+This tool is written in Go to address common limitations:
+
+1. **No FIPS Restrictions**: Works on FIPS-compliant systems without MD5 blocks
+2. **Universal Compatibility**: Single binary runs anywhere without runtime dependencies
+3. **No Execution Policies**: Works on locked-down systems that block scripts
+4. **True Cross-platform**: Native support for Windows, Linux, macOS, and BSD
+5. **Native Drive Access**: Direct access to device paths on all platforms
 
 ## License
 
