@@ -49,15 +49,22 @@ Download the compiled `chkiso.exe` from the [Releases](https://github.com/pappas
 chkiso.exe path\to\image.iso
 ```
 
-**Drive Letter Support**: Due to technical limitations in compiled executables (ps2exe), `chkiso.exe` requires `sha256sum.exe` to access drive letters (both mounted ISOs and physical CD/DVD drives):
-- **With sha256sum.exe installed**: `chkiso.exe` can verify drive letters: `chkiso.exe G:`
-  - Download sha256sum.exe from [GnuWin32](http://gnuwin32.sourceforge.net/packages/coreutils.htm) or install Git for Windows (includes sha256sum.exe)
-  - Place sha256sum.exe in the same directory as chkiso.exe or in your PATH
-- **Without sha256sum.exe**: Use one of these alternatives:
-  - Use the ISO file path directly: `chkiso.exe C:\path\to\image.iso`
-  - Or use the PowerShell script: `powershell -File chkiso.ps1 E:`
+**Important Limitation - Drive Letters**: The compiled executable (`chkiso.exe`) **cannot hash drive letters** directly due to ps2exe limitations with Win32 device paths. This affects both mounted ISOs and physical CD/DVD drives.
 
-The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive letters for mounted ISOs or physical media without requiring sha256sum.exe.
+**For drive letter hashing, use the PowerShell script instead:**
+```powershell
+powershell -File chkiso.ps1 G:
+```
+
+**Alternative for compiled executable**: Hash the ISO file directly if accessible:
+```cmd
+chkiso.exe G:\path\to\image.iso
+```
+
+**Why this limitation exists:**
+- Compiled ps2exe executables cannot access Win32 device paths (`\\.\G:`) needed for raw drive access
+- Tools like `sha256sum.exe` can only hash files, not raw drive devices
+- The PowerShell script (`chkiso.ps1`) uses native .NET FileStream with Win32 device paths and works with drive letters
 
 ## Building
 

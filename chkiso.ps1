@@ -206,32 +206,24 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    # For drives in compiled exe mode, MUST use sha256sum.exe (Win32 device paths don't work)
+    # For drives in compiled exe mode, sha256sum.exe cannot hash raw drives
+    # This is a fundamental limitation - sha256sum.exe only hashes files, not devices
     if ($IsDrive -and $script:isCompiledExe) {
-        $sha256sumPath = Get-Sha256sumPath
-        
-        if (-not $sha256sumPath) {
-            # This should not happen if validation logic is correct, but handle it safely
-            Write-Error "Critical error: Drive letter processing requires sha256sum.exe in compiled executable mode."
-            $script:hasErrors = $true
-            exit 1
-        }
-        
-        Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' using sha256sum.exe..."
-        
-        # Try to use sha256sum.exe with the drive letter directly
-        # Format the drive path for sha256sum (e.g., "G:\")
-        $drivePath = "${DriveLetter}:\"
-        
-        $result = Invoke-Sha256sumUtility -FilePath $drivePath -Sha256sumPath $sha256sumPath
-        
-        if ($result.Success) {
-            Write-Host "Successfully calculated hash using sha256sum.exe" -ForegroundColor Green
-            return $result.Hash
-        }
-        
-        # If sha256sum.exe fails, show error and exit (can't use Win32 device path in compiled exe)
-        Write-Error "sha256sum.exe failed to read from drive '$($DriveLetter.ToUpper()):'. The drive may not be ready or accessible."
+        Write-Host "`n" -NoNewline
+        Write-Host "ERROR: " -ForegroundColor Red -NoNewline
+        Write-Host "Cannot hash drive letters with compiled executable (chkiso.exe)" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Why this doesn't work:" -ForegroundColor Cyan
+        Write-Host "  - Compiled executables cannot access Win32 device paths (\\.\$($DriveLetter):)" -ForegroundColor Gray
+        Write-Host "  - sha256sum.exe can only hash files, not raw drive devices" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Solutions:" -ForegroundColor Cyan
+        Write-Host "  1. Use the PowerShell script for drive letters:" -ForegroundColor Yellow
+        Write-Host "     powershell -File chkiso.ps1 $($DriveLetter):" -ForegroundColor White
+        Write-Host ""
+        Write-Host "  2. If the drive contains an ISO file, hash the file directly:" -ForegroundColor Yellow
+        Write-Host "     chkiso.exe $($DriveLetter):\path\to\file.iso" -ForegroundColor White
+        Write-Host ""
         $script:hasErrors = $true
         exit 1
     }
@@ -576,17 +568,26 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 $sha256sumPath = Get-Sha256sumPath
                 
                 if (-not $sha256sumPath) {
-                    # No sha256sum.exe available - can't proceed with drive letters
-                    Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths." -ForegroundColor Yellow
+                    # No sha256sum.exe available - but it wouldn't work anyway for drives
+                    Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported." -ForegroundColor Yellow
+                    Write-Host ""
+                    Write-Host "Why: Compiled executables cannot access Win32 device paths, and sha256sum.exe" -ForegroundColor Gray
+                    Write-Host "     can only hash files, not raw drive devices." -ForegroundColor Gray
                     Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
-                    Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
-                    Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
-                    Write-Host "  3. Install sha256sum.exe (from GnuWin32 or Git for Windows) to enable drive letter support" -ForegroundColor Yellow
+                    Write-Host "  1. Use the ISO file path directly: chkiso.exe $($DriveLetter):\path\to\file.iso" -ForegroundColor White
+                    Write-Host "  2. Use the PowerShell script for drive hashing: powershell -File chkiso.ps1 $($DriveLetter):" -ForegroundColor White
                     exit 0
                 }
                 
-                # sha256sum.exe is available - we can try to use it for the drive
-                Write-Host "`nFound sha256sum.exe - attempting to use it for drive letter access..." -ForegroundColor Green
+                # sha256sum.exe is available but cannot hash raw drives
+                # Show the same error since it won't work anyway
+                Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported." -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "Why: sha256sum.exe can only hash files, not raw drive devices." -ForegroundColor Gray
+                Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
+                Write-Host "  1. Use the ISO file path directly: chkiso.exe $($DriveLetter):\path\to\file.iso" -ForegroundColor White
+                Write-Host "  2. Use the PowerShell script for drive hashing: powershell -File chkiso.ps1 $($DriveLetter):" -ForegroundColor White
+                exit 0
             }
             
             # For regular PowerShell with optical drives, treat as a physical drive
