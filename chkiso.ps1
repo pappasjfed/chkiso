@@ -137,8 +137,15 @@ function Get-Sha256Hash {
     
     # If sha256sum.exe is found, try to use it
     if ($sha256sumPath) {
+        # Verify file exists before attempting to display its name
+        if (-not (Test-Path $FilePath -PathType Leaf)) {
+            Write-Error "File not found: $FilePath"
+            return $null
+        }
+        
         if (-not $Quiet) {
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)' using sha256sum.exe..."
+            $fileName = (Get-Item $FilePath).Name
+            Write-Host "Calculating SHA256 hash for file '$fileName' using sha256sum.exe..."
         }
         
         $result = Invoke-Sha256sumUtility -FilePath $FilePath -Sha256sumPath $sha256sumPath
@@ -159,7 +166,8 @@ function Get-Sha256Hash {
     
     try {
         if (-not $Quiet) {
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)'..."
+            $fileName = (Get-Item $FilePath).Name
+            Write-Host "Calculating SHA256 hash for file '$fileName'..."
         }
         # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
         $stream = New-Object System.IO.FileStream($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
@@ -176,49 +184,36 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    # Check if sha256sum.exe utility is available (Windows) and use it for files only
-    if (-not $IsDrive) {
-        $sha256sumPath = Get-Sha256sumPath
+    # For drives, use built-in calculation (sha256sum.exe can't handle Win32 device paths)
+    if ($IsDrive) {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $stream = $null
         
-        if ($sha256sumPath) {
-            Write-Host "Found sha256sum.exe, using it to calculate hash..." -ForegroundColor Green
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
-            
-            $result = Invoke-Sha256sumUtility -FilePath $TargetPath -Sha256sumPath $sha256sumPath
-            
-            if ($result.Success) {
-                Write-Host "Successfully calculated hash using sha256sum.exe" -ForegroundColor Green
-                return $result.Hash
-            }
-            
-            # Fall back to built-in on failure
-            Write-Warning "sha256sum.exe utility failed, falling back to built-in hash calculation"
-        }
-    }
-    
-    # Use built-in SHA256 calculation if utility not available or for drives
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = $null
-    
-    try {
-        if ($IsDrive) {
+        try {
             Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
             $devicePath = "\\.\${DriveLetter}:"
             # Use FileStream constructor instead of File.OpenRead for Win32 device support
             $stream = New-Object System.IO.FileStream($devicePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
-        } else {
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
-            # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
-            $stream = New-Object System.IO.FileStream($TargetPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            
+            $hashBytes = $sha.ComputeHash($stream)
+            return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
         }
-        
-        $hashBytes = $sha.ComputeHash($stream)
-        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+        finally {
+            if ($stream) { $stream.Close() }
+            if ($sha) { $sha.Dispose() }
+        }
     }
-    finally {
-        if ($stream) { $stream.Close() }
-        if ($sha) { $sha.Dispose() }
+    
+    # For files, check if sha256sum.exe utility is available
+    $sha256sumPath = Get-Sha256sumPath
+    
+    if ($sha256sumPath) {
+        Write-Host "Found sha256sum.exe, using it to calculate hash..." -ForegroundColor Green
     }
+    
+    # Delegate to Get-Sha256Hash for file operations (handles both utility and built-in)
+    # Use -Quiet:$false to ensure messages are displayed
+    return Get-Sha256Hash -FilePath $TargetPath
 }
 
 function Verify-PathAgainstHashString {
