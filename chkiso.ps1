@@ -5,13 +5,13 @@
 .DESCRIPTION
     This script provides multiple methods for verification. You can run multiple checks in a single command.
 
-    1. Implanted MD5 Check: If not disabled with -NoMD5, this emulates the 'checkisomd5' utility on an ISO or physical drive.
+    1. Implanted MD5 Check: Use the -MD5 switch to emulate the 'checkisomd5' utility on an ISO or physical drive. If checkisomd5.exe is found in the current directory or PATH, it will be used instead of the built-in check to avoid FIPS restrictions.
 
     2. External SHA256 Hash String: Use the -Sha256Hash (or its alias -sha256sum) parameter to verify the ISO or physical drive against a provided hash string.
 
     3. External SHA256 File: Use the -ShaFile parameter to verify the ISO or physical drive against a hash found in a sha256sum-compatible file.
 
-    4. Verify Contents: Use the -VerifyContents switch to check the integrity of the files on an ISO or physical drive against any embedded checksum files (*.sha, sha256sum.txt).
+    4. Verify Contents: By default, the script checks the integrity of the files on an ISO or physical drive against any embedded checksum files (*.sha, sha256sum.txt). Use the -NoVerify switch to skip this check.
 
 .PARAMETER Path
     The path to the ISO file or the drive letter of the physical disc to verify (e.g., "D:").
@@ -22,11 +22,11 @@
 .PARAMETER ShaFile
     Specifies the path to a text file containing SHA256 hashes.
 
-.PARAMETER VerifyContents
-    A switch that tells the script to verify the hashes of the internal files.
+.PARAMETER NoVerify
+    A switch that tells the script to skip verifying the hashes of the internal files.
 
-.PARAMETER NoMD5
-    A switch to disable the implanted MD5 check.
+.PARAMETER MD5
+    A switch to enable the implanted MD5 check. If checkisomd5.exe is found in the current directory or PATH, it will be used instead of the built-in check to avoid FIPS restrictions.
 
 .PARAMETER Dismount
     A switch that dismounts the ISO or ejects the physical drive after verification.
@@ -47,10 +47,10 @@ param (
 
     [Parameter(Mandatory=$false)]
     [Alias('ValidateContents', 'CheckContents')]
-    [switch]$VerifyContents,
+    [switch]$NoVerify,
 
     [Parameter(Mandatory=$false)]
-    [switch]$NoMD5,
+    [switch]$MD5,
 
     [Parameter(Mandatory=$false)]
     [Alias('umount', 'unmount', 'eject')]
@@ -203,6 +203,49 @@ function Verify-Contents {
 function Verify-ImplantedIsoMd5 {
     param ([string]$Path, [bool]$IsDrive, [string]$DriveLetter)
     Write-Host "`n--- Verifying Implanted ISO MD5 (checkisomd5 compatible) ---" -ForegroundColor Cyan
+    
+    # First, check if checkisomd5.exe is available
+    $checkisomd5Path = $null
+    
+    # Check current directory first
+    if (Test-Path ".\checkisomd5.exe") {
+        $checkisomd5Path = (Resolve-Path ".\checkisomd5.exe").Path
+        Write-Host "Found checkisomd5.exe in current directory: $checkisomd5Path" -ForegroundColor Green
+    }
+    else {
+        # Check if it's in PATH
+        $checkisomd5Path = (Get-Command checkisomd5.exe -ErrorAction SilentlyContinue)?.Source
+        if ($checkisomd5Path) {
+            Write-Host "Found checkisomd5.exe in PATH: $checkisomd5Path" -ForegroundColor Green
+        }
+    }
+    
+    # If checkisomd5.exe is found, use it instead of built-in check
+    if ($checkisomd5Path) {
+        Write-Host "Using external checkisomd5.exe to avoid FIPS restrictions..."
+        try {
+            $targetPath = if ($IsDrive) { "\\.\${DriveLetter}:" } else { $Path }
+            $output = & $checkisomd5Path $targetPath 2>&1
+            $exitCode = $LASTEXITCODE
+            
+            Write-Host $output
+            
+            if ($exitCode -eq 0) {
+                Write-Host "`nSUCCESS: Implanted MD5 is valid (verified with checkisomd5.exe)." -ForegroundColor Green
+            }
+            else {
+                Write-Warning "`nFAILURE: Implanted MD5 verification failed (checkisomd5.exe exit code: $exitCode)."
+                $script:hasErrors = $true
+            }
+            return
+        }
+        catch {
+            Write-Warning "Failed to run checkisomd5.exe: $_"
+            Write-Host "Falling back to built-in MD5 check..."
+        }
+    }
+    
+    # Use built-in check if checkisomd5.exe is not available or failed
     $result = Invoke-ImplantedMd5Check -Path $Path -IsDrive $IsDrive -DriveLetter $DriveLetter
     if ($result) {
         if ($result.VerificationMethod -eq 'FIPS_BLOCKED') {
@@ -385,10 +428,17 @@ if ($PSBoundParameters.ContainsKey('ShaFile')) {
 if ($PSBoundParameters.ContainsKey('Sha256Hash')) {
     Verify-PathAgainstHashString -Path $ResolvedPath -ExpectedHash $Sha256Hash -IsDrive $isDrive -DriveLetter $driveLetter
 }
-if (-not $PSBoundParameters.ContainsKey('NoMD5')) {
+# If neither Sha256Hash nor ShaFile is provided, just display the SHA256 sum for informational purposes
+if (-not $PSBoundParameters.ContainsKey('Sha256Hash') -and -not $PSBoundParameters.ContainsKey('ShaFile')) {
+    Write-Host "`n--- SHA256 Hash (Informational) ---" -ForegroundColor Cyan
+    $calculatedHash = Get-Sha256FromPath -TargetPath $ResolvedPath -IsDrive $isDrive -DriveLetter $driveLetter
+    Write-Host "SHA256: $calculatedHash" -ForegroundColor Yellow
+}
+if ($PSBoundParameters.ContainsKey('MD5')) {
     Verify-ImplantedIsoMd5 -Path $ResolvedPath -IsDrive $isDrive -DriveLetter $driveLetter
 }
-if ($PSBoundParameters.ContainsKey('VerifyContents')) {
+# Run VerifyContents by default unless -NoVerify is specified
+if (-not $PSBoundParameters.ContainsKey('NoVerify')) {
     Verify-Contents -Path $ResolvedPath -IsDrive $isDrive -DriveLetter $driveLetter
 }
 

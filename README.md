@@ -6,10 +6,37 @@ This is a project that is used to validate ISO images created by standard DSO pi
 
 ## Usage
 
-### PowerShell Script
-Run the PowerShell script directly:
+### Basic Usage
+By default, the script:
+- Displays the SHA256 hash of the ISO/drive
+- Verifies internal file integrity against embedded checksum files (*.sha, sha256sum.txt)
+
 ```powershell
 .\chkiso.ps1 path\to\image.iso
+```
+
+### Advanced Options
+
+#### Check against an expected SHA256 hash:
+```powershell
+.\chkiso.ps1 path\to\image.iso <sha256-hash>
+```
+
+#### Check against a hash file:
+```powershell
+.\chkiso.ps1 path\to\image.iso -ShaFile path\to\hashfile.sha
+```
+
+#### Enable implanted MD5 check:
+```powershell
+.\chkiso.ps1 path\to\image.iso -MD5
+```
+
+**Note**: If `checkisomd5.exe` is available in the current directory or PATH, it will be used automatically to avoid FIPS restrictions.
+
+#### Skip internal file verification:
+```powershell
+.\chkiso.ps1 path\to\image.iso -NoVerify
 ```
 
 ### Windows Executable
