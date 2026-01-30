@@ -148,14 +148,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           go build -ldflags="-s -w" -trimpath -o ${{ matrix.output }}
-          
-          # Calculate SHA256 hash
-          if [ "$GOOS" = "windows" ]; then
-            sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
-          else
-            sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
-          fi
-          
+          sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
           echo "Built ${{ matrix.output }}"
           ls -lh ${{ matrix.output }}
       

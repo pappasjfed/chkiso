@@ -20,6 +20,7 @@ const (
 	APP_USE_OFFSET      = 883
 	APP_USE_SIZE        = 512
 	SECTOR_SIZE         = 2048
+	SPACE_CHAR          = 0x20  // Space character used for neutralizing PVD
 	VERSION             = "2.0.0"
 )
 
@@ -250,6 +251,14 @@ func getSha256FromPath(config *Config) (string, error) {
 func verifyPathAgainstHashString(config *Config) {
 	fmt.Println("\n--- Verifying Path Against Provided SHA256 Hash ---")
 	expectedHash := strings.ToLower(strings.TrimSpace(config.Sha256Hash))
+	
+	// Validate hash format (must be 64 hex characters)
+	if !regexp.MustCompile(`^[a-fA-F0-9]{64}$`).MatchString(expectedHash) {
+		fmt.Fprintf(os.Stderr, "Error: Invalid SHA256 hash format. Expected 64 hexadecimal characters.\n")
+		hasErrors = true
+		return
+	}
+	
 	calculatedHash, err := getSha256FromPath(config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error calculating hash: %v\n", err)
@@ -337,7 +346,6 @@ func verifyContents(config *Config) {
 	fmt.Println("\n--- Verifying Contents ---")
 	
 	var mountPath string
-	var needsUnmount bool
 	
 	if config.isDrive {
 		if runtime.GOOS == "windows" {
@@ -382,6 +390,7 @@ func verifyContents(config *Config) {
 			fmt.Fprintf(os.Stderr, "Warning: Could not open checksum file: %v\n", err)
 			continue
 		}
+		defer file.Close()  // Ensure file is closed even if we continue early
 		
 		scanner := bufio.NewScanner(file)
 		pattern := regexp.MustCompile(`^([a-fA-F0-9]{64})\s+[\*\.\/\\]*(.*)`)
@@ -397,7 +406,15 @@ func verifyContents(config *Config) {
 			expectedHash := strings.ToLower(matches[1])
 			fileName := strings.TrimSpace(matches[2])
 			
+			// Validate that the file path doesn't escape the base directory
 			filePathOnMedia := filepath.Join(baseDir, fileName)
+			cleanPath := filepath.Clean(filePathOnMedia)
+			if !strings.HasPrefix(cleanPath, filepath.Clean(baseDir)) {
+				fmt.Printf("Warning: Skipping potentially unsafe path: %s (referenced in %s)\n", fileName, filepath.Base(checksumFile))
+				failedFiles++
+				continue
+			}
+			
 			if _, err := os.Stat(filePathOnMedia); os.IsNotExist(err) {
 				fmt.Printf("Warning: File not found on media: %s (referenced in %s)\n", fileName, filepath.Base(checksumFile))
 				failedFiles++
@@ -420,8 +437,6 @@ func verifyContents(config *Config) {
 				failedFiles++
 			}
 		}
-		
-		file.Close()
 	}
 	
 	fmt.Println("\n--- Verification Summary ---")
@@ -433,10 +448,6 @@ func verifyContents(config *Config) {
 		fmt.Printf("\033[31mFailure: %d out of %d files failed.\033[0m\n", failedFiles, totalFiles)
 		hasErrors = true
 	}
-	
-	if needsUnmount {
-		// Cleanup mount if we mounted it
-	}
 }
 
 func findChecksumFiles(rootPath string) ([]string, error) {
@@ -444,7 +455,9 @@ func findChecksumFiles(rootPath string) ([]string, error) {
 	
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // Skip files we can't access
+			// Log permission errors but continue walking
+			fmt.Fprintf(os.Stderr, "Warning: Could not access %s: %v\n", path, err)
+			return nil
 		}
 		if info.IsDir() {
 			return nil
@@ -559,7 +572,7 @@ func checkImplantedMD5(config *Config) (*MD5Result, error) {
 	neutralizedPvd := make([]byte, len(pvdBlock))
 	copy(neutralizedPvd, pvdBlock)
 	for i := 0; i < APP_USE_SIZE; i++ {
-		neutralizedPvd[APP_USE_OFFSET+i] = 0x20 // space character
+		neutralizedPvd[APP_USE_OFFSET+i] = SPACE_CHAR
 	}
 	
 	// Calculate MD5 hash

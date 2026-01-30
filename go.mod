@@ -1,3 +1,3 @@
 module github.com/pappasjfed/chkiso
 
-go 1.24.12
+go 1.21
