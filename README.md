@@ -82,6 +82,19 @@ To build the executable locally:
    .\build.ps1 -Clean
    ```
 
+3. Optional: Download utility binaries
+   ```powershell
+   .\build.ps1 -DownloadUtilities
+   ```
+   
+   This will download helper utilities to bin/:
+   - `checkisomd5.exe` - From https://github.com/pappasjfed/isomd5sum/releases
+   - `sha256sum.exe` - From GnuWin32 CoreUtils package
+   
+   These utilities enhance functionality:
+   - checkisomd5.exe: Used for MD5 validation (avoids FIPS restrictions)
+   - sha256sum.exe: Required for drive letter support in compiled exe
+
 The compiled executable will be in the `bin/` directory.
 
 ### Manual Build

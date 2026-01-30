@@ -17,6 +17,7 @@ output/
 !bin/
 bin/*.exe
 bin/*.sha
+bin/*.dll
 
 # Ignore Files
 *.tgz
