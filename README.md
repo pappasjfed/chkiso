@@ -101,3 +101,16 @@ To build manually:
 ## Testing
 
 Tests run automatically on pull requests and pushes to main. The test suite validates the executable against `test/test.iso` using multiple verification methods.
+
+## CI/CD Workflows
+
+This project includes a comprehensive GitHub Actions workflow system for:
+- ✅ Continuous Integration (linting, testing, validation)
+- ✅ Automated Releases with semantic versioning
+- ✅ Security scanning (CodeQL, dependency review, secret scanning)
+- ✅ Documentation generation and validation
+- ✅ Package publishing
+
+**Quick Start**: See [WORKFLOWS.md](WORKFLOWS.md) for a getting started guide.
+
+**Full Documentation**: See [.github/workflows/README.md](.github/workflows/README.md) for complete workflow details.
