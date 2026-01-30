@@ -390,9 +390,20 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
         # Check if this is an optical drive (CD-ROM, DVD, Blu-ray, etc.)
-        # Some systems report these as 'CD-ROM', others as 'Unknown'
-        # We accept CD-ROM and Unknown types for optical drives
-        $isOpticalDrive = $volume.DriveType -in @('CD-ROM', 'Unknown')
+        # Note: Windows reports most optical drives as 'CD-ROM' including DVD and Blu-ray
+        # Some systems may report newer optical drives (like BD-RE) differently
+        # If your drive is not recognized, you can pass the ISO file path directly instead
+        $acceptedDriveTypes = @('CD-ROM')  # Primary type for optical drives
+        
+        # Additional check: If drive type is Unknown, we'll accept it if the user explicitly
+        # passed a drive letter, assuming they know what they're doing. However, this could
+        # cause errors if it's not actually an optical drive.
+        if ($volume.DriveType -eq 'Unknown') {
+            Write-Warning "Drive type is 'Unknown'. Attempting to treat as optical drive. If you encounter errors, please use the ISO file path directly."
+            $isOpticalDrive = $true
+        } else {
+            $isOpticalDrive = $volume.DriveType -in $acceptedDriveTypes
+        }
         
         if ($isOpticalDrive) {
             # Detect if running in ps2exe compiled executable
