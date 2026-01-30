@@ -63,16 +63,37 @@ The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive lett
 
 The Windows executable is automatically built and attached to releases via GitHub Actions. 
 
-### Code Signing
+### Local Build
 
-The executable can be automatically signed if code signing certificates are configured. See [CODE_SIGNING.md](CODE_SIGNING.md) for setup instructions. If certificates are not configured, the workflow will build an unsigned executable.
+To build the executable locally:
+
+1. Run the build script:
+   ```powershell
+   .\build.ps1
+   ```
+   
+   This will:
+   - Install ps2exe if needed
+   - Compile chkiso.ps1 to bin/chkiso.exe
+   - Generate SHA256 checksum (bin/chkiso.exe.sha)
+
+2. Optional: Clean build
+   ```powershell
+   .\build.ps1 -Clean
+   ```
+
+The compiled executable will be in the `bin/` directory.
 
 ### Manual Build
 
-To build manually:
+If you prefer to build manually:
 
 1. Install ps2exe: `Install-Module -Name ps2exe -Force`
-2. Compile: `ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"`
+2. Compile: `ps2exe -inputFile chkiso.ps1 -outputFile bin/chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"`
+
+### Code Signing
+
+The executable can be automatically signed if code signing certificates are configured. See [CODE_SIGNING.md](CODE_SIGNING.md) for setup instructions. If certificates are not configured, the workflow will build an unsigned executable.
 
 ## Testing
 

@@ -13,6 +13,11 @@ output/
 **/*group*/
 **/*chunk*/
 
+# Allow bin directory but ignore executables within it
+!bin/
+bin/*.exe
+bin/*.sha
+
 # Ignore Files
 *.tgz
 *.gz
