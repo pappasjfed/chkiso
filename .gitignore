@@ -33,6 +33,7 @@ output/
 *iso.txt
 *iso.sha
 *.dxp
+*.exe
 
 **/docker-ce-*/
 desktop.ini

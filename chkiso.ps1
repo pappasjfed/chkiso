@@ -5,13 +5,13 @@
 .DESCRIPTION
     This script provides multiple methods for verification. You can run multiple checks in a single command.
 
-    1. Implanted MD5 Check: If not disabled with -NoMD5, this emulates the 'checkisomd5' utility on an ISO or physical drive.
+    1. Implanted MD5 Check: Use the -MD5 switch to emulate the 'checkisomd5' utility on an ISO or physical drive. If checkisomd5.exe is found in the current directory or PATH, it will be used instead of the built-in check to avoid FIPS restrictions.
 
     2. External SHA256 Hash String: Use the -Sha256Hash (or its alias -sha256sum) parameter to verify the ISO or physical drive against a provided hash string.
 
     3. External SHA256 File: Use the -ShaFile parameter to verify the ISO or physical drive against a hash found in a sha256sum-compatible file.
 
-    4. Verify Contents: Use the -VerifyContents switch to check the integrity of the files on an ISO or physical drive against any embedded checksum files (*.sha, sha256sum.txt).
+    4. Verify Contents: By default, the script checks the integrity of the files on an ISO or physical drive against any embedded checksum files (*.sha, sha256sum.txt). Use the -NoVerify switch to skip this check.
 
 .PARAMETER Path
     The path to the ISO file or the drive letter of the physical disc to verify (e.g., "D:").
@@ -22,11 +22,11 @@
 .PARAMETER ShaFile
     Specifies the path to a text file containing SHA256 hashes.
 
-.PARAMETER VerifyContents
-    A switch that tells the script to verify the hashes of the internal files.
+.PARAMETER NoVerify
+    A switch that tells the script to skip verifying the hashes of the internal files.
 
-.PARAMETER NoMD5
-    A switch to disable the implanted MD5 check.
+.PARAMETER MD5
+    A switch to enable the implanted MD5 check. If checkisomd5.exe is found in the current directory or PATH, it will be used instead of the built-in check to avoid FIPS restrictions.
 
 .PARAMETER Dismount
     A switch that dismounts the ISO or ejects the physical drive after verification.
@@ -47,10 +47,10 @@ param (
 
     [Parameter(Mandatory=$false)]
     [Alias('ValidateContents', 'CheckContents')]
-    [switch]$VerifyContents,
+    [switch]$NoVerify,
 
     [Parameter(Mandatory=$false)]
-    [switch]$NoMD5,
+    [switch]$MD5,
 
     [Parameter(Mandatory=$false)]
     [Alias('umount', 'unmount', 'eject')]
@@ -62,6 +62,40 @@ param (
 $script:hasErrors = $false
 
 # --- Helper Functions ---
+
+function Get-Sha256Hash {
+    <#
+    .SYNOPSIS
+        Calculates SHA256 hash of a file using FileStream (ps2exe compatible).
+    .PARAMETER FilePath
+        Path to the file to hash.
+    .PARAMETER Quiet
+        If specified, suppresses the progress message.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$FilePath,
+        [switch]$Quiet
+    )
+    
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    
+    try {
+        if (-not $Quiet) {
+            Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)'..."
+        }
+        # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
+        $stream = New-Object System.IO.FileStream($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+        
+        $hashBytes = $sha.ComputeHash($stream)
+        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+    }
+    finally {
+        if ($stream) { $stream.Close() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
 
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
@@ -179,7 +213,7 @@ function Verify-Contents {
                         Write-Warning "File not found on media: $fileName (referenced in $($checksumFile.Name))"; $failedFiles++; return
                     }
                     Write-Host "Verifying: $fileName" -NoNewline
-                    $calculatedHash = (Get-FileHash -Path $filePathOnMedia -Algorithm SHA256).Hash.ToLower()
+                    $calculatedHash = Get-Sha256Hash -FilePath $filePathOnMedia -Quiet
                     if ($calculatedHash -eq $expectedHash) { Write-Host " -> OK" -ForegroundColor Green }
                     else { Write-Host " -> FAILED" -ForegroundColor Red; $failedFiles++ }
                 }
@@ -203,6 +237,58 @@ function Verify-Contents {
 function Verify-ImplantedIsoMd5 {
     param ([string]$Path, [bool]$IsDrive, [string]$DriveLetter)
     Write-Host "`n--- Verifying Implanted ISO MD5 (checkisomd5 compatible) ---" -ForegroundColor Cyan
+    
+    # First, check if checkisomd5.exe is available
+    $checkisomd5Path = $null
+    
+    # Check current directory first
+    if (Test-Path ".\checkisomd5.exe") {
+        $checkisomd5Path = (Resolve-Path ".\checkisomd5.exe").Path
+        Write-Host "Found checkisomd5.exe in current directory: $checkisomd5Path" -ForegroundColor Green
+    }
+    else {
+        # Check if it's in PATH
+        $checkisomd5Cmd = Get-Command checkisomd5.exe -ErrorAction SilentlyContinue
+        if ($checkisomd5Cmd) {
+            $checkisomd5Path = $checkisomd5Cmd.Source
+            Write-Host "Found checkisomd5.exe in PATH: $checkisomd5Path" -ForegroundColor Green
+        }
+    }
+    
+    # If checkisomd5.exe is found, use it instead of built-in check
+    if ($checkisomd5Path) {
+        Write-Host "Using external checkisomd5.exe to avoid FIPS restrictions..."
+        try {
+            # Verify the executable is accessible
+            if (-not (Test-Path $checkisomd5Path -PathType Leaf)) {
+                throw "checkisomd5.exe path is not accessible"
+            }
+            
+            $targetPath = if ($IsDrive) { "\\.\${DriveLetter}:" } else { $Path }
+            $output = & $checkisomd5Path $targetPath 2>&1
+            $exitCode = $LASTEXITCODE
+            
+            # Display output properly
+            if ($output) {
+                $output | ForEach-Object { Write-Host $_ }
+            }
+            
+            if ($exitCode -eq 0) {
+                Write-Host "`nSUCCESS: Implanted MD5 is valid (verified with checkisomd5.exe)." -ForegroundColor Green
+            }
+            else {
+                Write-Warning "`nFAILURE: Implanted MD5 verification failed (checkisomd5.exe exit code: $exitCode)."
+                $script:hasErrors = $true
+            }
+            return
+        }
+        catch {
+            Write-Warning "Failed to run checkisomd5.exe: $_"
+            Write-Host "Falling back to built-in MD5 check..."
+        }
+    }
+    
+    # Use built-in check if checkisomd5.exe is not available or failed
     $result = Invoke-ImplantedMd5Check -Path $Path -IsDrive $IsDrive -DriveLetter $DriveLetter
     if ($result) {
         if ($result.VerificationMethod -eq 'FIPS_BLOCKED') {
@@ -303,16 +389,25 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     $driveLetter = $Matches[1]
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
-        if ($volume.DriveType -eq 'CD-ROM') {
-            # Check if this is a mounted ISO image
-            # Note: In ps2exe (compiled exe), Get-DiskImage without parameters prompts for input
-            # and FileStream can't access Win32 device paths, so we need to handle this differently
-            
-            $diskImage = $null
-            $isCompiledExe = $false
-            
+        # Check if this is an optical drive (CD-ROM, DVD, Blu-ray, etc.)
+        # Note: Windows reports most optical drives as 'CD-ROM' including DVD and Blu-ray
+        # Some systems may report newer optical drives (like BD-RE) differently
+        # If your drive is not recognized, you can pass the ISO file path directly instead
+        $acceptedDriveTypes = @('CD-ROM')  # Primary type for optical drives
+        
+        # Additional check: If drive type is Unknown, we'll accept it if the user explicitly
+        # passed a drive letter, assuming they know what they're doing. However, this could
+        # cause errors if it's not actually an optical drive.
+        if ($volume.DriveType -eq 'Unknown') {
+            Write-Warning "Drive type is 'Unknown'. Attempting to treat as optical drive. If you encounter errors, please use the ISO file path directly."
+            $isOpticalDrive = $true
+        } else {
+            $isOpticalDrive = $volume.DriveType -in $acceptedDriveTypes
+        }
+        
+        if ($isOpticalDrive) {
             # Detect if running in ps2exe compiled executable
-            # ps2exe sets specific environment or the executable name differs from powershell.exe
+            $isCompiledExe = $false
             try {
                 $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
                 $processName = $currentProcess.ProcessName
@@ -325,44 +420,24 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 $isCompiledExe = $false
             }
             
-            if (-not $isCompiledExe) {
-                # Only try Get-DiskImage in regular PowerShell, not in compiled exe
-                try {
-                    # Get all attached disk images
-                    $allDiskImages = @(Get-DiskImage -ErrorAction SilentlyContinue | Where-Object { $_.Attached -eq $true })
-                    foreach ($img in $allDiskImages) {
-                        try {
-                            $imgVolume = $img | Get-Volume -ErrorAction SilentlyContinue
-                            if ($imgVolume -and $imgVolume.DriveLetter -eq $driveLetter) {
-                                $diskImage = $img
-                                break
-                            }
-                        } catch {
-                            # Skip this image if we can't get its volume
-                            continue
-                        }
-                    }
-                } catch {
-                    # If Get-DiskImage fails, assume it's a physical drive
-                    $diskImage = $null
-                }
+            if ($isCompiledExe) {
+                # In compiled exe, we can't use Win32 device paths for drive letters
+                # This applies to both mounted ISOs and physical drives
+                # Exit with 0 (success) since this is informational guidance, not an error
+                Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths." -ForegroundColor Yellow
+                Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
+                Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
+                Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
+                exit 0
             }
             
-            if ($diskImage -and $diskImage.ImagePath) {
-                # This is a mounted ISO - use the ISO file path directly instead of Win32 device path
-                # This avoids ps2exe issues with Win32 device paths on mounted ISOs
-                Write-Host "Detected mounted ISO at drive $($driveLetter): - using source file: $($diskImage.ImagePath)"
-                $ResolvedPath = $diskImage.ImagePath
-                $isDrive = $false  # Treat as a file, not a device
-            } else {
-                # This is a physical CD/DVD drive (or we're in compiled exe and can't detect)
-                # In ps2exe, we skip Get-DiskImage detection and assume physical drive
-                # FileStream with Win32 device path should work for physical media
-                $isDrive = $true
-                $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
-            }
+            # For regular PowerShell with optical drives, treat as a physical drive
+            # Note: We skip mounted ISO detection to avoid Get-DiskImage parameter prompts
+            # Win32 device path (\\.\X:) will be constructed later when IsDrive is true
+            $isDrive = $true
+            $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:" or "E:\")
         } else {
-            Write-Error "Path '$Path' is a drive, but not a CD/DVD drive."; exit
+            Write-Error "Path '$Path' is a drive, but not an optical drive (CD/DVD/Blu-ray). DriveType detected: $($volume.DriveType)"; exit
         }
     } catch {
         Write-Error "Drive '$Path' not found or is not ready."; exit
@@ -385,10 +460,17 @@ if ($PSBoundParameters.ContainsKey('ShaFile')) {
 if ($PSBoundParameters.ContainsKey('Sha256Hash')) {
     Verify-PathAgainstHashString -Path $ResolvedPath -ExpectedHash $Sha256Hash -IsDrive $isDrive -DriveLetter $driveLetter
 }
-if (-not $PSBoundParameters.ContainsKey('NoMD5')) {
+# If neither Sha256Hash nor ShaFile is provided, just display the SHA256 sum for informational purposes
+if (-not $PSBoundParameters.ContainsKey('Sha256Hash') -and -not $PSBoundParameters.ContainsKey('ShaFile')) {
+    Write-Host "`n--- SHA256 Hash (Informational) ---" -ForegroundColor Cyan
+    $calculatedHash = Get-Sha256FromPath -TargetPath $ResolvedPath -IsDrive $isDrive -DriveLetter $driveLetter
+    Write-Host "SHA256: $calculatedHash" -ForegroundColor Yellow
+}
+if ($PSBoundParameters.ContainsKey('MD5')) {
     Verify-ImplantedIsoMd5 -Path $ResolvedPath -IsDrive $isDrive -DriveLetter $driveLetter
 }
-if ($PSBoundParameters.ContainsKey('VerifyContents')) {
+# Run VerifyContents by default unless -NoVerify is specified
+if (-not $PSBoundParameters.ContainsKey('NoVerify')) {
     Verify-Contents -Path $ResolvedPath -IsDrive $isDrive -DriveLetter $driveLetter
 }
 

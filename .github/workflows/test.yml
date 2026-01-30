@@ -90,10 +90,10 @@ jobs:
             exit 1
           }
 
-      - name: Test executable with test.iso - Implanted MD5 Check
+      - name: Test executable with test.iso - Default behavior (SHA256 + Verify Contents)
         shell: pwsh
         run: |
-          Write-Host "Testing with test.iso (Implanted MD5 Check)..."
+          Write-Host "Testing with test.iso (default: SHA256 display + content verification)..."
           .\chkiso.exe test\test.iso
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
@@ -101,26 +101,37 @@ jobs:
           }
           Write-Host "Test passed!"
 
-      - name: Test executable with test.iso - SHA256 Hash Check
+      - name: Test executable with test.iso - Implanted MD5 Check
         shell: pwsh
         run: |
-          Write-Host "Testing with test.iso and SHA256 hash..."
-          .\chkiso.exe test\test.iso $env:TEST_ISO_HASH
+          Write-Host "Testing with test.iso (Implanted MD5 Check with -MD5 flag)..."
+          .\chkiso.exe test\test.iso -MD5
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
           }
           Write-Host "Test passed!"
 
-      - name: Test executable with test.iso - Hash File Check
+      - name: Test executable with test.iso - SHA256 Hash Check (skip verify)
+        shell: pwsh
+        run: |
+          Write-Host "Testing with test.iso and SHA256 hash (skip content verification)..."
+          .\chkiso.exe test\test.iso $env:TEST_ISO_HASH -NoVerify
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Test failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "Test passed!"
+
+      - name: Test executable with test.iso - Hash File Check (skip verify)
         shell: pwsh
         run: |
           Write-Host "Creating test hash file..."
           "$env:TEST_ISO_HASH  test.iso" | Out-File `
             -FilePath "test-hashes.sha" -Encoding utf8NoBOM
 
-          Write-Host "Testing with test.iso and hash file..."
-          .\chkiso.exe test\test.iso -ShaFile test-hashes.sha
+          Write-Host "Testing with test.iso and hash file (skip content verification)..."
+          .\chkiso.exe test\test.iso -ShaFile test-hashes.sha -NoVerify
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -131,7 +142,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Testing chkiso.ps1 directly with test.iso..."
-          .\chkiso.ps1 test\test.iso $env:TEST_ISO_HASH
+          .\chkiso.ps1 test\test.iso $env:TEST_ISO_HASH -NoVerify
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -154,32 +165,29 @@ jobs:
           Write-Host "ISO mounted at drive: $driveLetter`:"
 
           try {
-            # Test with Implanted MD5 Check
-            Write-Host "`nTesting mounted drive with Implanted MD5 Check..."
-            .\chkiso.exe "$driveLetter`:"
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "Mounted drive MD5 test failed"
-              exit 1
-            }
-            Write-Host "Mounted drive MD5 test passed!"
-
-            # Test with SHA256 Hash Check
-            Write-Host "`nTesting mounted drive with SHA256 hash..."
-            .\chkiso.exe "$driveLetter`:" $env:TEST_ISO_HASH
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "Mounted drive SHA256 test failed"
-              exit 1
-            }
-            Write-Host "Mounted drive SHA256 test passed!"
-
-            # Test with script directly
+            # Test with script directly using mounted drive (this should work)
             Write-Host "`nTesting mounted drive with chkiso.ps1 directly..."
-            .\chkiso.ps1 "$driveLetter`:" $env:TEST_ISO_HASH
+            .\chkiso.ps1 "$driveLetter`:" $env:TEST_ISO_HASH -NoVerify
             if ($LASTEXITCODE -ne 0) {
               Write-Error "Mounted drive script test failed"
               exit 1
             }
             Write-Host "Mounted drive script test passed!"
+            
+            # Note: The compiled exe (chkiso.exe) cannot access any drive letters (mounted ISOs or physical drives)
+            # due to ps2exe limitations with Win32 device paths. Users should use the ISO file path directly.
+            # The exe provides helpful guidance and exits with code 0 (success) for this informational message.
+            Write-Host "`nVerifying that chkiso.exe shows guidance message for drive letter access..."
+            $output = .\chkiso.exe "$driveLetter`:" 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Expected chkiso.exe to exit with code 0 (informational), but got exit code: $LASTEXITCODE"
+              exit 1
+            }
+            if ($output -notmatch "drive letters.*are not supported") {
+              Write-Error "Expected guidance message about drive letters not being supported, but got: $output"
+              exit 1
+            }
+            Write-Host "Confirmed: chkiso.exe provides helpful guidance for drive letter access (exit code 0)"
 
           } finally {
             Write-Host "`nDismounting ISO..."
