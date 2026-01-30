@@ -184,29 +184,34 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    # For drives in compiled exe mode, try to use sha256sum.exe with drive letter
+    # For drives in compiled exe mode, MUST use sha256sum.exe (Win32 device paths don't work)
     if ($IsDrive -and $script:isCompiledExe) {
         $sha256sumPath = Get-Sha256sumPath
         
-        if ($sha256sumPath) {
-            Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' using sha256sum.exe..."
-            
-            # Try to use sha256sum.exe with the drive letter directly
-            # Format the drive path for sha256sum (e.g., "G:\")
-            $drivePath = "${DriveLetter}:\"
-            
-            $result = Invoke-Sha256sumUtility -FilePath $drivePath -Sha256sumPath $sha256sumPath
-            
-            if ($result.Success) {
-                Write-Host "Successfully calculated hash using sha256sum.exe" -ForegroundColor Green
-                return $result.Hash
-            }
-            
-            # If sha256sum.exe fails, show error and exit (can't use Win32 device path in compiled exe)
-            Write-Error "sha256sum.exe failed to read from drive '$($DriveLetter.ToUpper()):'. The drive may not be ready or accessible."
+        if (-not $sha256sumPath) {
+            # This should not happen if validation logic is correct, but handle it safely
+            Write-Error "Critical error: Drive letter processing requires sha256sum.exe in compiled executable mode."
             $script:hasErrors = $true
             exit 1
         }
+        
+        Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' using sha256sum.exe..."
+        
+        # Try to use sha256sum.exe with the drive letter directly
+        # Format the drive path for sha256sum (e.g., "G:\")
+        $drivePath = "${DriveLetter}:\"
+        
+        $result = Invoke-Sha256sumUtility -FilePath $drivePath -Sha256sumPath $sha256sumPath
+        
+        if ($result.Success) {
+            Write-Host "Successfully calculated hash using sha256sum.exe" -ForegroundColor Green
+            return $result.Hash
+        }
+        
+        # If sha256sum.exe fails, show error and exit (can't use Win32 device path in compiled exe)
+        Write-Error "sha256sum.exe failed to read from drive '$($DriveLetter.ToUpper()):'. The drive may not be ready or accessible."
+        $script:hasErrors = $true
+        exit 1
     }
     
     # For drives (not in compiled exe mode), use built-in calculation with Win32 device paths
