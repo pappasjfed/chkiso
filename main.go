@@ -29,15 +29,14 @@ var (
 )
 
 type Config struct {
-	Path           string
-	Sha256Hash     string
-	ShaFile        string
-	NoVerify       bool
-	MD5Check       bool
-	Dismount       bool
-	isDrive        bool
-	driveLetter    string
-	isPhysicalDrive bool  // true if device path access is supported
+	Path        string
+	Sha256Hash  string
+	ShaFile     string
+	NoVerify    bool
+	MD5Check    bool
+	Dismount    bool
+	isDrive     bool
+	driveLetter string
 }
 
 func main() {
@@ -177,17 +176,7 @@ func validatePath(config *Config) error {
 		if matches := drivePattern.FindStringSubmatch(config.Path); matches != nil {
 			config.isDrive = true
 			config.driveLetter = strings.ToUpper(matches[1])
-			
-			// Check if this is a physical drive that supports device path access
-			config.isPhysicalDrive = IsPhysicalDrive(config.driveLetter)
-			
-			if !config.isPhysicalDrive {
-				driveType, _ := GetDriveType(config.driveLetter)
-				driveTypeStr := GetDriveTypeString(driveType)
-				fmt.Printf("Note: Drive %s: is a %s drive. Using filesystem access (device path not supported).\n", 
-					config.driveLetter, driveTypeStr)
-			}
-			
+			// On Windows, we'll use device path for drive access
 			return nil
 		}
 	}
@@ -233,16 +222,10 @@ func getSha256FromPath(config *Config) (string, error) {
 	
 	if config.isDrive {
 		fmt.Printf("Calculating SHA256 hash for drive '%s:' (this can be slow)...\n", config.driveLetter)
-		
+		// On Windows, use device path
 		if runtime.GOOS == "windows" {
-			if config.isPhysicalDrive {
-				// Physical drive - use device path for direct access
-				devicePath := fmt.Sprintf("\\\\.\\%s:", config.driveLetter)
-				file, err = os.Open(devicePath)
-			} else {
-				// Virtual/network drive - cannot hash entire drive, inform user
-				return "", fmt.Errorf("cannot calculate full drive hash for virtual/network drives (drive %s:). Please specify an ISO file path instead", config.driveLetter)
-			}
+			devicePath := fmt.Sprintf("\\\\.\\%s:", config.driveLetter)
+			file, err = os.Open(devicePath)
 		} else {
 			return "", fmt.Errorf("drive letters are only supported on Windows")
 		}
@@ -534,11 +517,6 @@ func checkImplantedMD5(config *Config) (*MD5Result, error) {
 	
 	if config.isDrive {
 		if runtime.GOOS == "windows" {
-			if !config.isPhysicalDrive {
-				// Virtual/network drives don't support implanted MD5 via device path
-				return nil, fmt.Errorf("implanted MD5 check not supported for virtual/network drives (drive %s:). Please specify an ISO file path instead", config.driveLetter)
-			}
-			
 			devicePath := fmt.Sprintf("\\\\.\\%s:", config.driveLetter)
 			file, err = os.Open(devicePath)
 			if err != nil {
