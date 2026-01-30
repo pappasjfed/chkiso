@@ -29,11 +29,26 @@ jobs:
           }
           
           # Convert to Windows version format (Major.Minor.Build.Revision)
+          # Parse and validate version parts
           $versionParts = $version -split '\.'
+          
+          if ($versionParts.Length -lt 3) {
+            Write-Error "Invalid version format: $version (expected at least MAJOR.MINOR.PATCH)"
+            exit 1
+          }
+          
+          # Extract numeric parts and validate
           $major = $versionParts[0]
-          $minor = if ($versionParts.Length -gt 1) { $versionParts[1] } else { "0" }
-          $build = if ($versionParts.Length -gt 2) { $versionParts[2] -replace '-.*$', '' } else { "0" }
+          $minor = $versionParts[1]
+          $build = $versionParts[2] -replace '-.*$', ''  # Remove pre-release suffix
           $revision = "0"
+          
+          # Validate all parts are numeric
+          if (-not ($major -match '^\d+$' -and $minor -match '^\d+$' -and $build -match '^\d+$')) {
+            Write-Error "Version parts must be numeric: $major.$minor.$build"
+            exit 1
+          }
+          
           $winVersion = "$major.$minor.$build.$revision"
           
           Write-Host "Windows version: $winVersion"

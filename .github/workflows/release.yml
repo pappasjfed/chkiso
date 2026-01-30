@@ -28,10 +28,20 @@ jobs:
 
       - name: Validate version format
         run: |
-          if ! echo "${{ inputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$'; then
-            echo "Error: Invalid version format. Use semantic versioning (e.g., 1.0.0, 1.1.0-beta)"
+          VERSION="${{ inputs.version }}"
+          
+          # Validate semantic versioning format
+          # Format: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-prerelease
+          # Pre-release: alphanumeric identifiers separated by dots, no empty identifiers
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$'; then
+            echo "Error: Invalid version format '$VERSION'"
+            echo "Use semantic versioning:"
+            echo "  - Release: 1.0.0, 1.1.0, 2.0.0"
+            echo "  - Pre-release: 1.0.0-beta, 1.0.0-rc.1, 1.0.0-alpha.2"
             exit 1
           fi
+          
+          echo "✓ Version format is valid: $VERSION"
 
       - name: Check if tag exists
         run: |
@@ -49,25 +59,35 @@ jobs:
           if [ -z "$LATEST_TAG" ]; then
             echo "First release - including all commits"
             COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+            COMPARE_URL="**First Release**"
           else
             echo "Generating changelog since $LATEST_TAG"
             COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+            COMPARE_URL="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${{ inputs.version }}"
           fi
           
           # Create changelog
-          cat > CHANGELOG.md << EOF
+          cat > CHANGELOG.md << 'CHANGELOG_EOF'
           ## Changes in v${{ inputs.version }}
           
           ${COMMITS}
           
           ---
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${{ inputs.version }}
-          EOF
+          ${COMPARE_URL}
+          CHANGELOG_EOF
+          
+          # Expand variables in changelog
+          eval "cat <<EVAL_EOF
+          $(cat CHANGELOG.md)
+          EVAL_EOF
+          " > CHANGELOG.md
           
           # Save for release notes
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          cat CHANGELOG.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "CHANGELOG<<EOF"
+            cat CHANGELOG.md
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Create and push tag
         run: |
