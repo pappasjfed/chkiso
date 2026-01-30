@@ -15,6 +15,8 @@ This is a project that is used to validate ISO images created by standard DSO pi
 
 The PowerShell version is still maintained for Windows users who prefer it.
 
+**📖 Migrating from PowerShell?** See the [Migration Guide](MIGRATION.md) for details.
+
 ## Installation
 
 ### Option 1: Download Pre-built Binary (Recommended)
