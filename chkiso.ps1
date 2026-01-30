@@ -63,10 +63,64 @@ $script:hasErrors = $false
 
 # --- Helper Functions ---
 
+function Get-Sha256sumPath {
+    <#
+    .SYNOPSIS
+        Checks if sha256sum.exe is available and returns its path.
+    .OUTPUTS
+        String path to sha256sum.exe if found, $null otherwise.
+    #>
+    # Check for sha256sum.exe in current directory first
+    if (Test-Path ".\sha256sum.exe") {
+        return (Resolve-Path ".\sha256sum.exe").Path
+    }
+    # Check if sha256sum.exe is in PATH
+    elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
+        return $sha256sumCmd.Source
+    }
+    return $null
+}
+
+function Invoke-Sha256sumUtility {
+    <#
+    .SYNOPSIS
+        Invokes sha256sum.exe utility to calculate hash, with fallback on failure.
+    .PARAMETER FilePath
+        Path to the file to hash.
+    .PARAMETER Sha256sumPath
+        Path to the sha256sum.exe utility.
+    .OUTPUTS
+        Hashtable with 'Success' (bool) and 'Hash' (string) if successful.
+    #>
+    param(
+        [string]$FilePath,
+        [string]$Sha256sumPath
+    )
+    
+    try {
+        # Run sha256sum and capture output
+        $output = & $Sha256sumPath $FilePath 2>&1
+        $exitCode = $LASTEXITCODE
+        
+        if ($exitCode -eq 0 -and $output) {
+            # Parse sha256sum output format: "<hash>  <filename>" or "<hash> <filename>"
+            $outputStr = $output | Out-String
+            if ($outputStr -match '^([a-fA-F0-9]{64})\s+') {
+                return @{ Success = $true; Hash = $matches[1].ToLower() }
+            }
+        }
+        
+        return @{ Success = $false }
+    }
+    catch {
+        return @{ Success = $false; Error = $_ }
+    }
+}
+
 function Get-Sha256Hash {
     <#
     .SYNOPSIS
-        Calculates SHA256 hash of a file using sha256sum utility if available, or FileStream (ps2exe compatible).
+        Calculates SHA256 hash of a file using sha256sum.exe if available, or FileStream (ps2exe compatible).
     .PARAMETER FilePath
         Path to the file to hash.
     .PARAMETER Quiet
@@ -78,56 +132,28 @@ function Get-Sha256Hash {
         [switch]$Quiet
     )
     
-    # First, check if sha256sum.exe utility is available (Windows)
-    $sha256sumPath = $null
+    # Check if sha256sum.exe utility is available (Windows)
+    $sha256sumPath = Get-Sha256sumPath
     
-    # Check for sha256sum.exe in current directory first
-    if (Test-Path ".\sha256sum.exe") {
-        $sha256sumPath = (Resolve-Path ".\sha256sum.exe").Path
-    }
-    # Check if sha256sum.exe is in PATH
-    elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
-        $sha256sumPath = $sha256sumCmd.Source
-    }
-    
-    # If sha256sum utility is found, try to use it
+    # If sha256sum.exe is found, try to use it
     if ($sha256sumPath) {
-        try {
-            if (-not $Quiet) {
-                Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)'..."
-            }
-            
-            # Verify the utility is accessible
-            if (-not (Test-Path $sha256sumPath -PathType Leaf)) {
-                throw "sha256sum utility path is not accessible"
-            }
-            
-            # Run sha256sum and capture output
-            $output = & $sha256sumPath $FilePath 2>&1
-            $exitCode = $LASTEXITCODE
-            
-            if ($exitCode -eq 0 -and $output) {
-                # Parse sha256sum output format: "<hash>  <filename>" or "<hash> <filename>"
-                $outputStr = $output | Out-String
-                if ($outputStr -match '^([a-fA-F0-9]{64})\s+') {
-                    return $matches[1].ToLower()
-                }
-            }
-            
-            # If we get here, something went wrong - fall back to built-in
-            if (-not $Quiet) {
-                Write-Warning "sha256sum utility did not produce expected output, falling back to built-in hash calculation"
-            }
+        if (-not $Quiet) {
+            Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)' using sha256sum.exe..."
         }
-        catch {
-            if (-not $Quiet) {
-                Write-Warning "Failed to run sha256sum utility: $_"
-                Write-Host "Falling back to built-in SHA256 calculation..."
-            }
+        
+        $result = Invoke-Sha256sumUtility -FilePath $FilePath -Sha256sumPath $sha256sumPath
+        
+        if ($result.Success) {
+            return $result.Hash
+        }
+        
+        # Fall back to built-in on failure
+        if (-not $Quiet) {
+            Write-Warning "sha256sum.exe utility failed, falling back to built-in hash calculation"
         }
     }
     
-    # Use built-in SHA256 calculation if utility not available
+    # Use built-in SHA256 calculation if utility not available or failed
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $stream = $null
     
@@ -150,49 +176,23 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    # First, check if sha256sum.exe utility is available (Windows)
-    $sha256sumPath = $null
-    
-    # Check for sha256sum.exe in current directory first
-    if (Test-Path ".\sha256sum.exe") {
-        $sha256sumPath = (Resolve-Path ".\sha256sum.exe").Path
-        Write-Host "Found sha256sum.exe in current directory" -ForegroundColor Green
-    }
-    # Check if sha256sum.exe is in PATH
-    elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
-        $sha256sumPath = $sha256sumCmd.Source
-        Write-Host "Found sha256sum.exe in PATH" -ForegroundColor Green
-    }
-    
-    # If sha256sum utility is found, use it for files (not for drives)
-    if ($sha256sumPath -and -not $IsDrive) {
-        try {
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)' using sha256sum utility..."
-            # Verify the utility is accessible
-            if (-not (Test-Path $sha256sumPath -PathType Leaf)) {
-                throw "sha256sum utility path is not accessible"
+    # Check if sha256sum.exe utility is available (Windows) and use it for files only
+    if (-not $IsDrive) {
+        $sha256sumPath = Get-Sha256sumPath
+        
+        if ($sha256sumPath) {
+            Write-Host "Found sha256sum.exe, using it to calculate hash..." -ForegroundColor Green
+            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
+            
+            $result = Invoke-Sha256sumUtility -FilePath $TargetPath -Sha256sumPath $sha256sumPath
+            
+            if ($result.Success) {
+                Write-Host "Successfully calculated hash using sha256sum.exe" -ForegroundColor Green
+                return $result.Hash
             }
             
-            # Run sha256sum and capture output
-            $output = & $sha256sumPath $TargetPath 2>&1
-            $exitCode = $LASTEXITCODE
-            
-            if ($exitCode -eq 0 -and $output) {
-                # Parse sha256sum output format: "<hash>  <filename>" or "<hash> <filename>"
-                $outputStr = $output | Out-String
-                if ($outputStr -match '^([a-fA-F0-9]{64})\s+') {
-                    $hash = $matches[1].ToLower()
-                    Write-Host "Successfully calculated hash using sha256sum utility" -ForegroundColor Green
-                    return $hash
-                }
-            }
-            
-            # If we get here, something went wrong - fall back to built-in
-            Write-Warning "sha256sum utility did not produce expected output, falling back to built-in hash calculation"
-        }
-        catch {
-            Write-Warning "Failed to run sha256sum utility: $_"
-            Write-Host "Falling back to built-in SHA256 calculation..."
+            # Fall back to built-in on failure
+            Write-Warning "sha256sum.exe utility failed, falling back to built-in hash calculation"
         }
     }
     
