@@ -26,13 +26,22 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
+          
+          # Create bin directory if it doesn't exist
+          if (-not (Test-Path bin)) {
+            New-Item -ItemType Directory -Path bin | Out-Null
+          }
+          
+          # Compile to bin directory
+          ps2exe -inputFile chkiso.ps1 -outputFile bin/chkiso.exe `
             -noConsole:$false -title "chkiso" -version "1.0.0.0" `
             -company "chkiso" -product "chkiso" -copyright "MIT License"
-          if (-not (Test-Path chkiso.exe)) {
-            Write-Error "chkiso.exe was not created"
+          if (-not (Test-Path bin/chkiso.exe)) {
+            Write-Error "bin/chkiso.exe was not created"
             exit 1
           }
+          
+          Write-Host "Successfully created bin/chkiso.exe"
 
       - name: Sign executable
         if: vars.CERTHASH != '' && vars.CERTNAME != ''
@@ -42,15 +51,15 @@ jobs:
           password: ${{ secrets.CERT_PASSWORD }}
           certificatesha1: ${{ vars.CERTHASH }}
           certificatename: ${{ vars.CERTNAME }}
-          folder: '.'
+          folder: 'bin'
           recursive: false
 
       - name: Calculate SHA256 checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash -Path chkiso.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  chkiso.exe" | Out-File -FilePath "chkiso.exe.sha" -Encoding utf8NoBOM
-          Write-Host "SHA256 checksum saved to chkiso.exe.sha"
+          $hash = (Get-FileHash -Path bin/chkiso.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  chkiso.exe" | Out-File -FilePath "bin/chkiso.exe.sha" -Encoding utf8NoBOM
+          Write-Host "SHA256 checksum saved to bin/chkiso.exe.sha"
           Write-Host "Hash: $hash"
 
       - name: Upload executable artifact
@@ -59,8 +68,8 @@ jobs:
           name: chkiso-exe
           path: |
             chkiso.ps1
-            chkiso.exe
-            chkiso.exe.sha
+            bin/chkiso.exe
+            bin/chkiso.exe.sha
 
       - name: Attach to Release
         if: github.event_name == 'release'
@@ -68,7 +77,7 @@ jobs:
         with:
           files: |
             chkiso.ps1
-            chkiso.exe
-            chkiso.exe.sha
+            bin/chkiso.exe
+            bin/chkiso.exe.sha
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -48,14 +48,21 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
+          
+          # Create bin directory if it doesn't exist
+          if (-not (Test-Path bin)) {
+            New-Item -ItemType Directory -Path bin | Out-Null
+          }
+          
+          # Compile to bin directory
+          ps2exe -inputFile chkiso.ps1 -outputFile bin/chkiso.exe `
             -noConsole:$false -title "chkiso" -version "1.0.0.0" `
             -company "chkiso" -product "chkiso" -copyright "MIT License"
-          if (-not (Test-Path chkiso.exe)) {
-            Write-Error "chkiso.exe was not created"
+          if (-not (Test-Path bin/chkiso.exe)) {
+            Write-Error "bin/chkiso.exe was not created"
             exit 1
           }
-          Write-Host "Successfully created chkiso.exe"
+          Write-Host "Successfully created bin/chkiso.exe"
 
       - name: Sign executable
         if: vars.CERTHASH != '' && vars.CERTNAME != ''
@@ -65,22 +72,22 @@ jobs:
           password: ${{ secrets.CERT_PASSWORD }}
           certificatesha1: ${{ vars.CERTHASH }}
           certificatename: ${{ vars.CERTNAME }}
-          folder: '.'
+          folder: 'bin'
           recursive: false
 
       - name: Calculate SHA256 checksum
         shell: pwsh
         run: |
-          $hash = (Get-FileHash -Path chkiso.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  chkiso.exe" | Out-File -FilePath "chkiso.exe.sha" -Encoding utf8NoBOM
-          Write-Host "SHA256 checksum saved to chkiso.exe.sha"
+          $hash = (Get-FileHash -Path bin/chkiso.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  chkiso.exe" | Out-File -FilePath "bin/chkiso.exe.sha" -Encoding utf8NoBOM
+          Write-Host "SHA256 checksum saved to bin/chkiso.exe.sha"
           Write-Host "Hash: $hash"
 
       - name: Verify checksum file
         shell: pwsh
         run: |
           Write-Host "Verifying checksum file can be read and validated..."
-          $content = Get-Content -Path "chkiso.exe.sha" -Raw
+          $content = Get-Content -Path "bin/chkiso.exe.sha" -Raw
           Write-Host "Checksum file contents: $content"
           # Validate format matches sha256sum format (lowercase hex)
           if ($content -match "^[a-f0-9]{64}\s+chkiso\.exe") {
@@ -94,7 +101,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Testing with test.iso (default: SHA256 display + content verification)..."
-          .\chkiso.exe test\test.iso
+          .\bin\chkiso.exe test\test.iso
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -105,7 +112,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Testing with test.iso (Implanted MD5 Check with -MD5 flag)..."
-          .\chkiso.exe test\test.iso -MD5
+          .\bin\chkiso.exe test\test.iso -MD5
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -116,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Testing with test.iso and SHA256 hash (skip content verification)..."
-          .\chkiso.exe test\test.iso $env:TEST_ISO_HASH -NoVerify
+          .\bin\chkiso.exe test\test.iso $env:TEST_ISO_HASH -NoVerify
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -131,7 +138,7 @@ jobs:
             -FilePath "test-hashes.sha" -Encoding utf8NoBOM
 
           Write-Host "Testing with test.iso and hash file (skip content verification)..."
-          .\chkiso.exe test\test.iso -ShaFile test-hashes.sha -NoVerify
+          .\bin\chkiso.exe test\test.iso -ShaFile test-hashes.sha -NoVerify
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Test failed with exit code $LASTEXITCODE"
             exit 1
@@ -177,17 +184,17 @@ jobs:
             # Note: The compiled exe (chkiso.exe) cannot access any drive letters (mounted ISOs or physical drives)
             # due to ps2exe limitations with Win32 device paths. Users should use the ISO file path directly.
             # The exe provides helpful guidance and exits with code 0 (success) for this informational message.
-            Write-Host "`nVerifying that chkiso.exe shows guidance message for drive letter access..."
-            $output = .\chkiso.exe "$driveLetter`:" 2>&1 | Out-String
+            Write-Host "`nVerifying that bin/chkiso.exe shows guidance message for drive letter access..."
+            $output = .\bin\chkiso.exe "$driveLetter`:" 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0) {
-              Write-Error "Expected chkiso.exe to exit with code 0 (informational), but got exit code: $LASTEXITCODE"
+              Write-Error "Expected bin/chkiso.exe to exit with code 0 (informational), but got exit code: $LASTEXITCODE"
               exit 1
             }
             if ($output -notmatch "drive letters.*are not supported") {
               Write-Error "Expected guidance message about drive letters not being supported, but got: $output"
               exit 1
             }
-            Write-Host "Confirmed: chkiso.exe provides helpful guidance for drive letter access (exit code 0)"
+            Write-Host "Confirmed: bin/chkiso.exe provides helpful guidance for drive letter access (exit code 0)"
 
           } finally {
             Write-Host "`nDismounting ISO..."
@@ -202,6 +209,6 @@ jobs:
           name: test-artifacts
           path: |
             chkiso.ps1
-            chkiso.exe
-            chkiso.exe.sha
+            bin/chkiso.exe
+            bin/chkiso.exe.sha
             test-hashes.sha

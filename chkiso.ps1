@@ -63,10 +63,86 @@ $script:hasErrors = $false
 
 # --- Helper Functions ---
 
+function Get-Sha256sumPath {
+    <#
+    .SYNOPSIS
+        Checks if sha256sum.exe is available and returns its path.
+    .OUTPUTS
+        String path to sha256sum.exe if found, $null otherwise.
+    #>
+    # Check for sha256sum.exe in current directory first
+    if (Test-Path ".\sha256sum.exe") {
+        return (Resolve-Path ".\sha256sum.exe").Path
+    }
+    # Check if sha256sum.exe is in PATH
+    elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
+        return $sha256sumCmd.Source
+    }
+    # Check common Git for Windows installation locations
+    else {
+        # Try system-wide Git for Windows installation (64-bit)
+        $gitPath = "C:\Program Files\Git\usr\bin\sha256sum.exe"
+        if (Test-Path $gitPath -ErrorAction SilentlyContinue) {
+            return $gitPath
+        }
+        
+        # Try user-local Git for Windows installation
+        if ($env:LOCALAPPDATA) {
+            $userGitPath = Join-Path $env:LOCALAPPDATA "Programs\Git\usr\bin\sha256sum.exe"
+            if (Test-Path $userGitPath -ErrorAction SilentlyContinue) {
+                return $userGitPath
+            }
+        }
+        
+        # Try 32-bit Git for Windows installation
+        $git32Path = "C:\Program Files (x86)\Git\usr\bin\sha256sum.exe"
+        if (Test-Path $git32Path -ErrorAction SilentlyContinue) {
+            return $git32Path
+        }
+    }
+    return $null
+}
+
+function Invoke-Sha256sumUtility {
+    <#
+    .SYNOPSIS
+        Invokes sha256sum.exe utility to calculate hash, with fallback on failure.
+    .PARAMETER FilePath
+        Path to the file to hash.
+    .PARAMETER Sha256sumPath
+        Path to the sha256sum.exe utility.
+    .OUTPUTS
+        Hashtable with 'Success' (bool) and 'Hash' (string) if successful.
+    #>
+    param(
+        [string]$FilePath,
+        [string]$Sha256sumPath
+    )
+    
+    try {
+        # Run sha256sum and capture output
+        $output = & $Sha256sumPath $FilePath 2>&1
+        $exitCode = $LASTEXITCODE
+        
+        if ($exitCode -eq 0 -and $output) {
+            # Parse sha256sum output format: "<hash>  <filename>" or "<hash> <filename>"
+            $outputStr = $output | Out-String
+            if ($outputStr -match '^([a-fA-F0-9]{64})\s+') {
+                return @{ Success = $true; Hash = $matches[1].ToLower() }
+            }
+        }
+        
+        return @{ Success = $false }
+    }
+    catch {
+        return @{ Success = $false; Error = $_ }
+    }
+}
+
 function Get-Sha256Hash {
     <#
     .SYNOPSIS
-        Calculates SHA256 hash of a file using FileStream (ps2exe compatible).
+        Calculates SHA256 hash of a file using sha256sum.exe if available, or FileStream (ps2exe compatible).
     .PARAMETER FilePath
         Path to the file to hash.
     .PARAMETER Quiet
@@ -78,12 +154,42 @@ function Get-Sha256Hash {
         [switch]$Quiet
     )
     
+    # Check if sha256sum.exe utility is available (Windows)
+    $sha256sumPath = Get-Sha256sumPath
+    
+    # If sha256sum.exe is found, try to use it
+    if ($sha256sumPath) {
+        # Verify file exists before attempting to display its name
+        if (-not (Test-Path $FilePath -PathType Leaf)) {
+            Write-Error "File not found: $FilePath"
+            return $null
+        }
+        
+        if (-not $Quiet) {
+            $fileName = (Get-Item $FilePath).Name
+            Write-Host "Calculating SHA256 hash for file '$fileName' using sha256sum.exe..."
+        }
+        
+        $result = Invoke-Sha256sumUtility -FilePath $FilePath -Sha256sumPath $sha256sumPath
+        
+        if ($result.Success) {
+            return $result.Hash
+        }
+        
+        # Fall back to built-in on failure
+        if (-not $Quiet) {
+            Write-Warning "sha256sum.exe utility failed, falling back to built-in hash calculation"
+        }
+    }
+    
+    # Use built-in SHA256 calculation if utility not available or failed
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $stream = $null
     
     try {
         if (-not $Quiet) {
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $FilePath).Name)'..."
+            $fileName = (Get-Item $FilePath).Name
+            Write-Host "Calculating SHA256 hash for file '$fileName'..."
         }
         # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
         $stream = New-Object System.IO.FileStream($FilePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
@@ -100,28 +206,58 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = $null
+    # For drives in compiled exe mode, sha256sum.exe cannot hash raw drives
+    # This is a fundamental limitation - sha256sum.exe only hashes files, not devices
+    if ($IsDrive -and $script:isCompiledExe) {
+        Write-Host "`n" -NoNewline
+        Write-Host "ERROR: " -ForegroundColor Red -NoNewline
+        Write-Host "Cannot hash drive letters with compiled executable (chkiso.exe)" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Why this doesn't work:" -ForegroundColor Cyan
+        Write-Host "  - Compiled executables cannot access Win32 device paths (\\.\$($DriveLetter):)" -ForegroundColor Gray
+        Write-Host "  - sha256sum.exe can only hash files, not raw drive devices" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Solutions:" -ForegroundColor Cyan
+        Write-Host "  1. Use the PowerShell script for drive letters:" -ForegroundColor Yellow
+        Write-Host "     powershell -File chkiso.ps1 $($DriveLetter):" -ForegroundColor White
+        Write-Host ""
+        Write-Host "  2. If the drive contains an ISO file, hash the file directly:" -ForegroundColor Yellow
+        Write-Host "     chkiso.exe $($DriveLetter):\path\to\file.iso" -ForegroundColor White
+        Write-Host ""
+        $script:hasErrors = $true
+        exit 1
+    }
     
-    try {
-        if ($IsDrive) {
+    # For drives (not in compiled exe mode), use built-in calculation with Win32 device paths
+    if ($IsDrive) {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $stream = $null
+        
+        try {
             Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' (this can be slow)..."
             $devicePath = "\\.\${DriveLetter}:"
             # Use FileStream constructor instead of File.OpenRead for Win32 device support
             $stream = New-Object System.IO.FileStream($devicePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
-        } else {
-            Write-Host "Calculating SHA256 hash for file '$((Get-Item $TargetPath).Name)'..."
-            # Use FileStream for ps2exe compatibility (Get-FileHash not available in compiled exe)
-            $stream = New-Object System.IO.FileStream($TargetPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+            
+            $hashBytes = $sha.ComputeHash($stream)
+            return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
         }
-        
-        $hashBytes = $sha.ComputeHash($stream)
-        return [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+        finally {
+            if ($stream) { $stream.Close() }
+            if ($sha) { $sha.Dispose() }
+        }
     }
-    finally {
-        if ($stream) { $stream.Close() }
-        if ($sha) { $sha.Dispose() }
+    
+    # For files, check if sha256sum.exe utility is available
+    $sha256sumPath = Get-Sha256sumPath
+    
+    if ($sha256sumPath) {
+        Write-Host "Found sha256sum.exe, using it to calculate hash..." -ForegroundColor Green
     }
+    
+    # Delegate to Get-Sha256Hash for file operations (handles both utility and built-in)
+    # Use -Quiet:$false to ensure messages are displayed
+    return Get-Sha256Hash -FilePath $TargetPath
 }
 
 function Verify-PathAgainstHashString {
@@ -380,6 +516,9 @@ function Invoke-ImplantedMd5Check {
 # Track mounted drive letter for proper cleanup
 $script:mountedDriveLetter = $null
 
+# Track if running as compiled exe (for sha256sum.exe drive support)
+$script:isCompiledExe = $false
+
 # FIX: Robust path validation at the start of the script.
 $isDrive = $false
 $driveLetter = ''
@@ -420,14 +559,34 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 $isCompiledExe = $false
             }
             
+            # Store in script scope for use in Get-Sha256FromPath
+            $script:isCompiledExe = $isCompiledExe
+            
             if ($isCompiledExe) {
                 # In compiled exe, we can't use Win32 device paths for drive letters
-                # This applies to both mounted ISOs and physical drives
-                # Exit with 0 (success) since this is informational guidance, not an error
-                Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths." -ForegroundColor Yellow
+                # However, sha256sum.exe might be able to read from drive letters directly
+                $sha256sumPath = Get-Sha256sumPath
+                
+                if (-not $sha256sumPath) {
+                    # No sha256sum.exe available - but it wouldn't work anyway for drives
+                    Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported." -ForegroundColor Yellow
+                    Write-Host ""
+                    Write-Host "Why: Compiled executables cannot access Win32 device paths, and sha256sum.exe" -ForegroundColor Gray
+                    Write-Host "     can only hash files, not raw drive devices." -ForegroundColor Gray
+                    Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
+                    Write-Host "  1. Use the ISO file path directly: chkiso.exe $($DriveLetter):\path\to\file.iso" -ForegroundColor White
+                    Write-Host "  2. Use the PowerShell script for drive hashing: powershell -File chkiso.ps1 $($DriveLetter):" -ForegroundColor White
+                    exit 0
+                }
+                
+                # sha256sum.exe is available but cannot hash raw drives
+                # Show the same error since it won't work anyway
+                Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported." -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "Why: sha256sum.exe can only hash files, not raw drive devices." -ForegroundColor Gray
                 Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
-                Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
-                Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
+                Write-Host "  1. Use the ISO file path directly: chkiso.exe $($DriveLetter):\path\to\file.iso" -ForegroundColor White
+                Write-Host "  2. Use the PowerShell script for drive hashing: powershell -File chkiso.ps1 $($DriveLetter):" -ForegroundColor White
                 exit 0
             }
             
