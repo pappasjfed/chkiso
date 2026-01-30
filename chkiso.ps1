@@ -389,7 +389,12 @@ if ($Path -match '^([A-Za-z]):\\?$') {
     $driveLetter = $Matches[1]
     try {
         $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
-        if ($volume.DriveType -eq 'CD-ROM') {
+        # Check if this is an optical drive (CD-ROM, DVD, Blu-ray, etc.)
+        # Some systems report these as 'CD-ROM', others as 'Unknown'
+        # We accept CD-ROM and Unknown types for optical drives
+        $isOpticalDrive = $volume.DriveType -in @('CD-ROM', 'Unknown')
+        
+        if ($isOpticalDrive) {
             # Detect if running in ps2exe compiled executable
             $isCompiledExe = $false
             try {
@@ -415,13 +420,13 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 exit 0
             }
             
-            # For regular PowerShell with CD-ROM drives, treat as a physical drive
+            # For regular PowerShell with optical drives, treat as a physical drive
             # Note: We skip mounted ISO detection to avoid Get-DiskImage parameter prompts
             # Win32 device path (\\.\X:) will be constructed later when IsDrive is true
             $isDrive = $true
-            $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
+            $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:" or "E:\")
         } else {
-            Write-Error "Path '$Path' is a drive, but not a CD/DVD drive."; exit
+            Write-Error "Path '$Path' is a drive, but not an optical drive (CD/DVD/Blu-ray). DriveType detected: $($volume.DriveType)"; exit
         }
     } catch {
         Write-Error "Drive '$Path' not found or is not ready."; exit
