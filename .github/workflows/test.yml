@@ -174,16 +174,20 @@ jobs:
             }
             Write-Host "Mounted drive script test passed!"
             
-            # Note: The compiled exe (chkiso.exe) cannot access mounted ISOs via drive letters
+            # Note: The compiled exe (chkiso.exe) cannot access any drive letters (mounted ISOs or physical drives)
             # due to ps2exe limitations with Win32 device paths. Users should use the ISO file path directly.
             # We test that the exe shows an appropriate error message for this scenario.
-            Write-Host "`nVerifying that chkiso.exe shows error for mounted drive letter..."
-            .\chkiso.exe "$driveLetter`:" 2>&1 | Out-Null
+            Write-Host "`nVerifying that chkiso.exe shows error for drive letter access..."
+            $output = .\chkiso.exe "$driveLetter`:" 2>&1 | Out-String
             if ($LASTEXITCODE -eq 0) {
-              Write-Error "Expected chkiso.exe to fail with mounted drive letter, but it succeeded"
+              Write-Error "Expected chkiso.exe to fail with drive letter, but it succeeded"
               exit 1
             }
-            Write-Host "Confirmed: chkiso.exe correctly rejects mounted drive letter access"
+            if ($output -notmatch "drive letters.*are not supported") {
+              Write-Error "Expected error message about drive letters not being supported, but got: $output"
+              exit 1
+            }
+            Write-Host "Confirmed: chkiso.exe correctly rejects drive letter access with helpful error message"
 
           } finally {
             Write-Host "`nDismounting ISO..."

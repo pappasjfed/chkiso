@@ -47,9 +47,9 @@ Download the compiled `chkiso.exe` from the [Releases](https://github.com/pappas
 chkiso.exe path\to\image.iso
 ```
 
-**Important**: Due to technical limitations in compiled executables, `chkiso.exe` cannot access mounted ISO files via drive letters (e.g., `E:`). If you have a mounted ISO, either:
+**Important Limitation**: Due to technical limitations in compiled executables (ps2exe), `chkiso.exe` cannot access drive letters - this includes both mounted ISOs and physical CD/DVD drives. If you need to verify media via a drive letter:
 - Use the ISO file path directly: `chkiso.exe C:\path\to\image.iso`
-- Or use the PowerShell script instead: `powershell -File chkiso.ps1 E:`
+- Or use the PowerShell script: `powershell -File chkiso.ps1 E:`
 
 The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive letters for mounted ISOs or physical media.
 

@@ -442,14 +442,15 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 $isDrive = $false  # Treat as a file, not a device
             } elseif ($isCompiledExe) {
                 # In compiled exe, we can't detect mounted ISOs and Win32 device paths don't work
-                # Instruct user to use the ISO file path directly
-                Write-Error "When using the compiled executable (chkiso.exe), mounted ISO drive letters are not supported due to technical limitations."
-                Write-Error "Please use the ISO file path directly instead of the drive letter."
-                Write-Error "Example: chkiso.exe C:\path\to\image.iso"
+                # This applies to both mounted ISOs and physical drives
+                Write-Error "When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths."
+                Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
+                Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
+                Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
                 exit 1
             } else {
-                # This is a physical CD/DVD drive (or Get-DiskImage failed to detect)
-                # FileStream with Win32 device path should work for physical media in regular PowerShell
+                # This is a physical CD/DVD drive in regular PowerShell (Get-DiskImage failed to detect a mounted ISO)
+                # Win32 device path (\\.\X:) will be constructed later when IsDrive is true
                 $isDrive = $true
                 $ResolvedPath = $Path # For a drive, the path is just the letter (e.g., "E:")
             }
