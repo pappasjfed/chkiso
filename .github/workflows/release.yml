@@ -1,0 +1,161 @@
+---
+name: Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build-powershell:
+    name: Build PowerShell Executable
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ps2exe
+        shell: pwsh
+        run: |
+          Install-Module -Name ps2exe -Force -Scope CurrentUser
+          Import-Module ps2exe
+
+      - name: Compile chkiso.ps1 to executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ps2exe -inputFile chkiso.ps1 -outputFile chkiso-ps.exe `
+            -noConsole:$false -title "chkiso" -version "1.0.0.0" `
+            -company "chkiso" -product "chkiso" -copyright "MIT License"
+          if (-not (Test-Path chkiso-ps.exe)) {
+            Write-Error "chkiso-ps.exe was not created"
+            exit 1
+          }
+
+      - name: Sign executable
+        if: vars.CERTHASH != '' && vars.CERTNAME != ''
+        uses: DanaBear/code-sign-action@v4
+        with:
+          certificate: ${{ secrets.CERTIFICATE }}
+          password: ${{ secrets.CERT_PASSWORD }}
+          certificatesha1: ${{ vars.CERTHASH }}
+          certificatename: ${{ vars.CERTNAME }}
+          folder: '.'
+          recursive: false
+
+      - name: Calculate SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Path chkiso-ps.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  chkiso-ps.exe" | Out-File -FilePath "chkiso-ps.exe.sha256" -Encoding utf8NoBOM
+          Write-Host "SHA256 checksum saved to chkiso-ps.exe.sha256"
+          Write-Host "Hash: $hash"
+
+      - name: Upload PowerShell artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: powershell-exe
+          path: |
+            chkiso.ps1
+            chkiso-ps.exe
+            chkiso-ps.exe.sha256
+
+  build-go:
+    name: Build Go Binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            output: chkiso-windows-amd64.exe
+          - goos: windows
+            goarch: 386
+            output: chkiso-windows-386.exe
+          - goos: windows
+            goarch: arm64
+            output: chkiso-windows-arm64.exe
+          - goos: linux
+            goarch: amd64
+            output: chkiso-linux-amd64
+          - goos: linux
+            goarch: 386
+            output: chkiso-linux-386
+          - goos: linux
+            goarch: arm64
+            output: chkiso-linux-arm64
+          - goos: linux
+            goarch: arm
+            output: chkiso-linux-arm
+          - goos: darwin
+            goarch: amd64
+            output: chkiso-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: chkiso-darwin-arm64
+          - goos: freebsd
+            goarch: amd64
+            output: chkiso-freebsd-amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags="-s -w" -trimpath -o ${{ matrix.output }}
+          sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
+          echo "Built ${{ matrix.output }}"
+          ls -lh ${{ matrix.output }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            ${{ matrix.output }}
+            ${{ matrix.output }}.sha256
+
+  release:
+    name: Attach to Release
+    needs: [build-powershell, build-go]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Attach to Release
+        uses: softprops/action-gh-release@v2.0.8
+        with:
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

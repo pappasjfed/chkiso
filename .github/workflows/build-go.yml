@@ -1,0 +1,168 @@
+---
+name: Build Go Binary
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test Go Binary
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Build
+        run: go build -v -o chkiso
+      
+      - name: Test version
+        run: ./chkiso -version
+      
+      - name: Test help
+        run: ./chkiso -help || true
+      
+      - name: Read test ISO hash
+        id: read_hash
+        run: |
+          hashFile="test/test.iso.sha"
+          if [ ! -f "$hashFile" ]; then
+            echo "Hash file not found: $hashFile"
+            exit 1
+          fi
+          hash=$(grep -o '^[a-f0-9]\{64\}' "$hashFile")
+          echo "Read hash from file: $hash"
+          echo "TEST_ISO_HASH=$hash" >> $GITHUB_ENV
+      
+      - name: Test basic SHA256 display
+        run: |
+          echo "Testing basic SHA256 display..."
+          ./chkiso test/test.iso -noverify
+          if [ $? -ne 0 ]; then
+            echo "Test failed"
+            exit 1
+          fi
+          echo "Test passed!"
+      
+      - name: Test SHA256 hash verification (positional)
+        run: |
+          echo "Testing SHA256 hash verification (positional)..."
+          ./chkiso test/test.iso "$TEST_ISO_HASH" -noverify
+          if [ $? -ne 0 ]; then
+            echo "Test failed"
+            exit 1
+          fi
+          echo "Test passed!"
+      
+      - name: Test SHA256 hash verification (flag)
+        run: |
+          echo "Testing SHA256 hash verification (flag)..."
+          ./chkiso -sha256 "$TEST_ISO_HASH" test/test.iso -noverify
+          if [ $? -ne 0 ]; then
+            echo "Test failed"
+            exit 1
+          fi
+          echo "Test passed!"
+      
+      - name: Test SHA256 hash file verification
+        run: |
+          echo "Testing SHA256 hash file verification..."
+          ./chkiso test/test.iso -shafile test/test.iso.sha -noverify
+          if [ $? -ne 0 ]; then
+            echo "Test failed"
+            exit 1
+          fi
+          echo "Test passed!"
+      
+      - name: Test implanted MD5 check
+        run: |
+          echo "Testing implanted MD5 check..."
+          ./chkiso test/test.iso -md5 -noverify
+          if [ $? -ne 0 ]; then
+            echo "Test failed"
+            exit 1
+          fi
+          echo "Test passed!"
+  
+  build:
+    name: Build Multi-Platform Binaries
+    runs-on: ubuntu-latest
+    needs: test
+    
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            output: chkiso-windows-amd64.exe
+          - goos: windows
+            goarch: 386
+            output: chkiso-windows-386.exe
+          - goos: windows
+            goarch: arm64
+            output: chkiso-windows-arm64.exe
+          - goos: linux
+            goarch: amd64
+            output: chkiso-linux-amd64
+          - goos: linux
+            goarch: 386
+            output: chkiso-linux-386
+          - goos: linux
+            goarch: arm64
+            output: chkiso-linux-arm64
+          - goos: linux
+            goarch: arm
+            output: chkiso-linux-arm
+          - goos: darwin
+            goarch: amd64
+            output: chkiso-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: chkiso-darwin-arm64
+          - goos: freebsd
+            goarch: amd64
+            output: chkiso-freebsd-amd64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags="-s -w" -trimpath -o ${{ matrix.output }}
+          
+          # Calculate SHA256 hash
+          if [ "$GOOS" = "windows" ]; then
+            sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
+          else
+            sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
+          fi
+          
+          echo "Built ${{ matrix.output }}"
+          ls -lh ${{ matrix.output }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: |
+            ${{ matrix.output }}
+            ${{ matrix.output }}.sha256
