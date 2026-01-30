@@ -1,73 +1,194 @@
-# What is this?
-[![Test](https://github.com/pappasjfed/chkiso/actions/workflows/test.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/test.yml)
-[![Build and Release](https://github.com/pappasjfed/chkiso/actions/workflows/build-release.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/build-release.yml)
+# chkiso - ISO/Drive Verification Tool
 
-This is a project that is used to validate ISO images created by standard DSO pipelines.  It checks hashes for ISOs or media.
+[![Build Go Binary](https://github.com/pappasjfed/chkiso/actions/workflows/build-go.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/build-go.yml)
+[![Release](https://github.com/pappasjfed/chkiso/actions/workflows/release.yml/badge.svg)](https://github.com/pappasjfed/chkiso/actions/workflows/release.yml)
+
+A cross-platform tool for validating ISO images and optical media. Written in Go for maximum portability and reliability.
+
+## Features
+
+- ✅ **Cross-platform**: Works on Windows, Linux, macOS, and FreeBSD
+- ✅ **No FIPS restrictions**: MD5 hashing works everywhere (no policy blocks)
+- ✅ **Single executable**: Statically-linked binary with no dependencies
+- ✅ **Multiple verification methods**:
+  - SHA256 hash verification
+  - MD5 implanted hash check (checkisomd5 compatible)
+  - External hash file verification
+  - Content verification against embedded checksums
+
+## Installation
+
+### Download Pre-built Binary (Recommended)
+
+Download the appropriate binary for your platform from the [Releases](https://github.com/pappasjfed/chkiso/releases) page:
+
+- **Windows**: `chkiso-windows-amd64.exe` (64-bit), `chkiso-windows-386.exe` (32-bit), or `chkiso-windows-arm64.exe` (ARM)
+- **Linux**: `chkiso-linux-amd64` (64-bit), `chkiso-linux-arm64` (ARM 64-bit), `chkiso-linux-arm` (ARM 32-bit), or `chkiso-linux-386` (32-bit)
+- **macOS**: `chkiso-darwin-amd64` (Intel) or `chkiso-darwin-arm64` (Apple Silicon)
+- **FreeBSD**: `chkiso-freebsd-amd64`
+
+On Linux/macOS/FreeBSD, make the binary executable:
+```bash
+chmod +x chkiso-*
+```
+
+### Build from Source
+
+Requirements: [Go 1.21+](https://golang.org/dl/)
+
+```bash
+git clone https://github.com/pappasjfed/chkiso.git
+cd chkiso
+go build -o chkiso
+```
+
+Or use the Makefile for cross-platform builds:
+```bash
+make build           # Build for current platform
+make build-all       # Build for all platforms
+make windows         # Build for Windows
+make linux           # Build for Linux
+make macos           # Build for macOS
+```
 
 ## Usage
 
 ### Basic Usage
-By default, the script:
-- Displays the SHA256 hash of the ISO/drive
-- Verifies internal file integrity against embedded checksum files (*.sha, sha256sum.txt)
 
-```powershell
-.\chkiso.ps1 path\to\image.iso
+By default, chkiso displays the SHA256 hash of the ISO/drive and verifies internal file integrity:
+
+```bash
+chkiso path/to/image.iso
 ```
 
 ### Advanced Options
 
-#### Check against an expected SHA256 hash:
-```powershell
-.\chkiso.ps1 path\to\image.iso <sha256-hash>
-```
-**Note**: Content verification runs by default. Use `-NoVerify` to skip it.
+#### Verify against an expected SHA256 hash:
 
-#### Check against a hash file:
-```powershell
-.\chkiso.ps1 path\to\image.iso -ShaFile path\to\hashfile.sha
-```
-**Note**: Content verification runs by default. Use `-NoVerify` to skip it.
+```bash
+# Positional argument
+chkiso image.iso <sha256-hash>
 
-#### Enable implanted MD5 check:
-```powershell
-.\chkiso.ps1 path\to\image.iso -MD5
+# Or using flag
+chkiso -sha256 <sha256-hash> image.iso
 ```
 
-**Note**: If `checkisomd5.exe` is available in the current directory or PATH, it will be used automatically to avoid FIPS restrictions.
+**Note**: Content verification runs by default. Use `-noverify` to skip it.
+
+#### Verify against a hash file:
+
+```bash
+chkiso image.iso -shafile path/to/hashfile.sha
+```
+
+#### Check implanted MD5 hash:
+
+```bash
+chkiso image.iso -md5
+```
+
+**Advantage**: No FIPS restrictions! Works on all systems regardless of security policies.
 
 #### Skip internal file verification:
-```powershell
-.\chkiso.ps1 path\to\image.iso -NoVerify
+
+```bash
+chkiso image.iso -noverify
 ```
 
-### Windows Executable
-Download the compiled `chkiso.exe` from the [Releases](https://github.com/pappasjfed/chkiso/releases) page and run it:
-```cmd
-chkiso.exe path\to\image.iso
+#### Verify a drive (Windows):
+
+```bash
+chkiso E:
 ```
 
-**Important Limitation**: Due to technical limitations in compiled executables (ps2exe), `chkiso.exe` cannot access drive letters - this includes both mounted ISOs and physical CD/DVD drives. If you need to verify media via a drive letter:
-- Use the ISO file path directly: `chkiso.exe C:\path\to\image.iso`
-- Or use the PowerShell script: `powershell -File chkiso.ps1 E:`
+#### All options:
 
-The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive letters for mounted ISOs or physical media.
+```
+Options:
+  -sha256 <hash>      Expected SHA256 hash for verification
+  -sha256sum <hash>   Alias for -sha256
+  -sha <hash>         Alias for -sha256
+  -shafile <file>     Path to SHA256 hash file
+  -noverify           Skip verifying internal file hashes
+  -md5                Enable implanted MD5 check
+  -dismount           Dismount/eject after verification
+  -eject              Alias for -dismount
+  -version            Display version information
+  -help               Display help information
+```
+
+### Examples
+
+```bash
+# Display SHA256 hash
+chkiso ubuntu-22.04-desktop-amd64.iso
+
+# Verify against known hash
+chkiso ubuntu-22.04-desktop-amd64.iso a4acfda10b18da50e2ec50ccaf860d7f20b389df8765611142305c0e911d16fd
+
+# Verify using hash file
+chkiso ubuntu-22.04-desktop-amd64.iso -shafile SHA256SUMS
+
+# Check implanted MD5 and verify contents
+chkiso rhel-9.0-x86_64-dvd.iso -md5
+
+# Quick hash check without content verification
+chkiso image.iso <hash> -noverify
+```
 
 ## Building
 
-The Windows executable is automatically built and attached to releases via GitHub Actions. 
+### Go Binary
 
-### Code Signing
+The Go binaries are automatically built for multiple platforms via GitHub Actions.
 
-The executable can be automatically signed if code signing certificates are configured. See [CODE_SIGNING.md](CODE_SIGNING.md) for setup instructions. If certificates are not configured, the workflow will build an unsigned executable.
+**Manual build:**
+```bash
+# Current platform
+go build -o chkiso
 
-### Manual Build
+# Specific platform
+GOOS=windows GOARCH=amd64 go build -o chkiso-windows-amd64.exe
+GOOS=linux GOARCH=amd64 go build -o chkiso-linux-amd64
+GOOS=darwin GOARCH=arm64 go build -o chkiso-darwin-arm64
+```
 
-To build manually:
-
-1. Install ps2exe: `Install-Module -Name ps2exe -Force`
-2. Compile: `ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe -noConsole:$false -title "chkiso" -version "1.0.0.0" -company "chkiso" -product "chkiso" -copyright "MIT License"`
+**Using Makefile:**
+```bash
+make build-all    # Build for all platforms
+make windows      # Windows binaries
+make linux        # Linux binaries
+make macos        # macOS binaries
+```
 
 ## Testing
 
-Tests run automatically on pull requests and pushes to main. The test suite validates the executable against `test/test.iso` using multiple verification methods.
+Tests run automatically on pull requests and pushes to main. The test suite validates the Go implementation against `test/test.iso` using multiple verification methods.
+
+Run tests locally:
+```bash
+go test -v ./...
+```
+
+## Platform Support
+
+| Platform | Architecture | Status |
+|----------|--------------|--------|
+| Windows  | amd64, 386, arm64 | ✅ Fully supported |
+| Linux    | amd64, 386, arm, arm64 | ✅ Fully supported |
+| macOS    | amd64 (Intel), arm64 (Apple Silicon) | ✅ Fully supported |
+| FreeBSD  | amd64 | ✅ Fully supported |
+
+## Why Go?
+
+This tool is written in Go to address common limitations:
+
+1. **No FIPS Restrictions**: Works on FIPS-compliant systems without MD5 blocks
+2. **Universal Compatibility**: Single binary runs anywhere without runtime dependencies
+3. **No Execution Policies**: Works on locked-down systems that block scripts
+4. **True Cross-platform**: Native support for Windows, Linux, macOS, and BSD
+5. **Native Drive Access**: Direct access to device paths on all platforms
+
+## License
+
+MIT License - See LICENSE file for details.

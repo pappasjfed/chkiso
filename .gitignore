@@ -12,6 +12,7 @@ docs/
 output/
 **/*group*/
 **/*chunk*/
+build/
 
 # Ignore Repositories
 **/rhel-*-for-x86_64-*-rpms/
@@ -35,5 +36,13 @@ output/
 *.dxp
 *.exe
 
+# Exception: Don't ignore test files
+!test/*.iso
+!test/*.sha
+
 **/docker-ce-*/
 desktop.ini
+
+# Go specific
+chkiso
+chkiso-*
