@@ -49,11 +49,15 @@ Download the compiled `chkiso.exe` from the [Releases](https://github.com/pappas
 chkiso.exe path\to\image.iso
 ```
 
-**Important Limitation**: Due to technical limitations in compiled executables (ps2exe), `chkiso.exe` cannot access drive letters - this includes both mounted ISOs and physical CD/DVD drives. If you need to verify media via a drive letter:
-- Use the ISO file path directly: `chkiso.exe C:\path\to\image.iso`
-- Or use the PowerShell script: `powershell -File chkiso.ps1 E:`
+**Drive Letter Support**: Due to technical limitations in compiled executables (ps2exe), `chkiso.exe` requires `sha256sum.exe` to access drive letters (both mounted ISOs and physical CD/DVD drives):
+- **With sha256sum.exe installed**: `chkiso.exe` can verify drive letters: `chkiso.exe G:`
+  - Download sha256sum.exe from [GnuWin32](http://gnuwin32.sourceforge.net/packages/coreutils.htm) or install Git for Windows (includes sha256sum.exe)
+  - Place sha256sum.exe in the same directory as chkiso.exe or in your PATH
+- **Without sha256sum.exe**: Use one of these alternatives:
+  - Use the ISO file path directly: `chkiso.exe C:\path\to\image.iso`
+  - Or use the PowerShell script: `powershell -File chkiso.ps1 E:`
 
-The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive letters for mounted ISOs or physical media.
+The PowerShell script (`chkiso.ps1`) supports both ISO file paths and drive letters for mounted ISOs or physical media without requiring sha256sum.exe.
 
 ## Building
 

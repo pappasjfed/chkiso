@@ -184,7 +184,32 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    # For drives, use built-in calculation (sha256sum.exe can't handle Win32 device paths)
+    # For drives in compiled exe mode, try to use sha256sum.exe with drive letter
+    if ($IsDrive -and $script:isCompiledExe) {
+        $sha256sumPath = Get-Sha256sumPath
+        
+        if ($sha256sumPath) {
+            Write-Host "Calculating SHA256 hash for drive '$($DriveLetter.ToUpper()):' using sha256sum.exe..."
+            
+            # Try to use sha256sum.exe with the drive letter directly
+            # Format the drive path for sha256sum (e.g., "G:\")
+            $drivePath = "${DriveLetter}:\"
+            
+            $result = Invoke-Sha256sumUtility -FilePath $drivePath -Sha256sumPath $sha256sumPath
+            
+            if ($result.Success) {
+                Write-Host "Successfully calculated hash using sha256sum.exe" -ForegroundColor Green
+                return $result.Hash
+            }
+            
+            # If sha256sum.exe fails, show error and exit (can't use Win32 device path in compiled exe)
+            Write-Error "sha256sum.exe failed to read from drive '$($DriveLetter.ToUpper()):'. The drive may not be ready or accessible."
+            $script:hasErrors = $true
+            exit 1
+        }
+    }
+    
+    # For drives (not in compiled exe mode), use built-in calculation with Win32 device paths
     if ($IsDrive) {
         $sha = [System.Security.Cryptography.SHA256]::Create()
         $stream = $null
@@ -472,6 +497,9 @@ function Invoke-ImplantedMd5Check {
 # Track mounted drive letter for proper cleanup
 $script:mountedDriveLetter = $null
 
+# Track if running as compiled exe (for sha256sum.exe drive support)
+$script:isCompiledExe = $false
+
 # FIX: Robust path validation at the start of the script.
 $isDrive = $false
 $driveLetter = ''
@@ -512,15 +540,26 @@ if ($Path -match '^([A-Za-z]):\\?$') {
                 $isCompiledExe = $false
             }
             
+            # Store in script scope for use in Get-Sha256FromPath
+            $script:isCompiledExe = $isCompiledExe
+            
             if ($isCompiledExe) {
                 # In compiled exe, we can't use Win32 device paths for drive letters
-                # This applies to both mounted ISOs and physical drives
-                # Exit with 0 (success) since this is informational guidance, not an error
-                Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths." -ForegroundColor Yellow
-                Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
-                Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
-                Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
-                exit 0
+                # However, sha256sum.exe might be able to read from drive letters directly
+                $sha256sumPath = Get-Sha256sumPath
+                
+                if (-not $sha256sumPath) {
+                    # No sha256sum.exe available - can't proceed with drive letters
+                    Write-Host "`nNote: When using the compiled executable (chkiso.exe), drive letters (e.g., E:) are not supported due to technical limitations with Win32 device paths." -ForegroundColor Yellow
+                    Write-Host "`nPlease use one of these alternatives:" -ForegroundColor Yellow
+                    Write-Host "  1. Use the ISO file path directly: chkiso.exe C:\path\to\image.iso" -ForegroundColor Yellow
+                    Write-Host "  2. Use the PowerShell script instead: powershell -File chkiso.ps1 E:" -ForegroundColor Yellow
+                    Write-Host "  3. Install sha256sum.exe (from GnuWin32 or Git for Windows) to enable drive letter support" -ForegroundColor Yellow
+                    exit 0
+                }
+                
+                # sha256sum.exe is available - we can try to use it for the drive
+                Write-Host "`nFound sha256sum.exe - attempting to use it for drive letter access..." -ForegroundColor Green
             }
             
             # For regular PowerShell with optical drives, treat as a physical drive
