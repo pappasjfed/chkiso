@@ -36,7 +36,7 @@ By default, the script:
 
 **Note**: If `checkisomd5.exe` is available in the current directory or PATH, it will be used automatically to avoid FIPS restrictions.
 
-**Note**: SHA256 calculations will automatically use the `sha256sum` utility if available in the current directory or PATH for improved performance. The script will fall back to built-in calculation if the utility is not found.
+**Note**: SHA256 calculations will automatically use `sha256sum.exe` if available in the current directory or PATH for improved performance. The script will fall back to built-in calculation if the utility is not found.
 
 #### Skip internal file verification:
 ```powershell

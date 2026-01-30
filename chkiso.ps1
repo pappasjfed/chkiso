@@ -78,19 +78,15 @@ function Get-Sha256Hash {
         [switch]$Quiet
     )
     
-    # First, check if sha256sum utility is available
+    # First, check if sha256sum.exe utility is available (Windows)
     $sha256sumPath = $null
     
-    # Check for sha256sum.exe (Windows) in current directory first
+    # Check for sha256sum.exe in current directory first
     if (Test-Path ".\sha256sum.exe") {
         $sha256sumPath = (Resolve-Path ".\sha256sum.exe").Path
     }
-    # Check if sha256sum.exe is in PATH (Windows)
+    # Check if sha256sum.exe is in PATH
     elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
-        $sha256sumPath = $sha256sumCmd.Source
-    }
-    # Check if sha256sum is in PATH (Linux/Unix)
-    elseif ($sha256sumCmd = Get-Command sha256sum -ErrorAction SilentlyContinue) {
         $sha256sumPath = $sha256sumCmd.Source
     }
     
@@ -154,23 +150,18 @@ function Get-Sha256Hash {
 function Get-Sha256FromPath {
     param( [string]$TargetPath, [bool]$IsDrive, [string]$DriveLetter )
     
-    # First, check if sha256sum utility is available
+    # First, check if sha256sum.exe utility is available (Windows)
     $sha256sumPath = $null
     
-    # Check for sha256sum.exe (Windows) in current directory first
+    # Check for sha256sum.exe in current directory first
     if (Test-Path ".\sha256sum.exe") {
         $sha256sumPath = (Resolve-Path ".\sha256sum.exe").Path
         Write-Host "Found sha256sum.exe in current directory" -ForegroundColor Green
     }
-    # Check if sha256sum.exe is in PATH (Windows)
+    # Check if sha256sum.exe is in PATH
     elseif ($sha256sumCmd = Get-Command sha256sum.exe -ErrorAction SilentlyContinue) {
         $sha256sumPath = $sha256sumCmd.Source
         Write-Host "Found sha256sum.exe in PATH" -ForegroundColor Green
-    }
-    # Check if sha256sum is in PATH (Linux/Unix)
-    elseif ($sha256sumCmd = Get-Command sha256sum -ErrorAction SilentlyContinue) {
-        $sha256sumPath = $sha256sumCmd.Source
-        Write-Host "Found sha256sum utility in PATH" -ForegroundColor Green
     }
     
     # If sha256sum utility is found, use it for files (not for drives)
