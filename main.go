@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -29,14 +30,16 @@ var (
 )
 
 type Config struct {
-	Path        string
-	Sha256Hash  string
-	ShaFile     string
-	NoVerify    bool
-	MD5Check    bool
-	Dismount    bool
-	isDrive     bool
-	driveLetter string
+	Path               string
+	Sha256Hash         string
+	ShaFile            string
+	NoVerify           bool
+	MD5Check           bool
+	Dismount           bool
+	isDrive            bool
+	driveLetter        string
+	mountedISO         bool   // Track if we mounted the ISO (vs user-mounted)
+	mountedDriveLetter string // Drive letter where we mounted the ISO
 }
 
 func main() {
@@ -346,6 +349,7 @@ func verifyContents(config *Config) {
 	fmt.Println("\n--- Verifying Contents ---")
 	
 	var mountPath string
+	var needsCleanup bool
 	
 	if config.isDrive {
 		if runtime.GOOS == "windows" {
@@ -357,13 +361,42 @@ func verifyContents(config *Config) {
 			return
 		}
 	} else {
-		// For ISO files, we need to mount them
-		// This is platform-specific and complex, so for now we'll skip auto-mounting
-		// Users can manually mount and provide the mount point
-		fmt.Println("Note: For ISO files, please mount the ISO manually and verify using the mount point.")
-		fmt.Println("Example (Windows): Mount-DiskImage image.iso, then run: chkiso E:")
-		fmt.Println("Example (Linux): sudo mount -o loop image.iso /mnt, then run: chkiso /mnt")
-		return
+		// For ISO files, try to mount them automatically on Windows
+		if runtime.GOOS == "windows" {
+			fmt.Printf("Mounting ISO: %s\n", config.Path)
+			driveLetter, err := mountISO(config.Path)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to mount ISO automatically: %v\n", err)
+				fmt.Println("\nNote: For ISO files, please mount the ISO manually and verify using the mount point.")
+				fmt.Println("Example (Windows): Mount-DiskImage image.iso, then run: chkiso E:")
+				return
+			}
+			
+			config.mountedISO = true
+			config.mountedDriveLetter = driveLetter
+			needsCleanup = true
+			mountPath = fmt.Sprintf("%s:\\", driveLetter)
+			fmt.Printf("Mounted to drive: %s:\n", driveLetter)
+			
+			// Ensure cleanup happens even if verification fails
+			defer func() {
+				if needsCleanup && config.mountedISO {
+					fmt.Println("\nUnmounting ISO...")
+					if err := dismountISO(config.Path); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: Failed to unmount ISO: %v\n", err)
+						fmt.Printf("Please dismount manually using: Dismount-DiskImage -ImagePath '%s'\n", config.Path)
+					} else {
+						fmt.Println("ISO unmounted successfully.")
+						config.mountedISO = false
+					}
+				}
+			}()
+		} else {
+			// Non-Windows platforms
+			fmt.Println("Note: For ISO files, please mount the ISO manually and verify using the mount point.")
+			fmt.Println("Example (Linux): sudo mount -o loop image.iso /mnt, then run: chkiso /mnt")
+			return
+		}
 	}
 	
 	fmt.Printf("Searching for checksum files (*.sha, sha256sum.txt, SHA256SUMS) in %s...\n", mountPath)
@@ -651,12 +684,88 @@ func checkImplantedMD5(config *Config) (*MD5Result, error) {
 	}, nil
 }
 
+// mountISO mounts an ISO file on Windows using PowerShell's Mount-DiskImage
+// Returns the drive letter (e.g., "H") and an error if mounting fails
+func mountISO(isoPath string) (string, error) {
+	if runtime.GOOS != "windows" {
+		return "", fmt.Errorf("automatic ISO mounting is only supported on Windows")
+	}
+	
+	// Get absolute path
+	absPath, err := filepath.Abs(isoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %v", err)
+	}
+	
+	// Mount the ISO and get the drive letter
+	// Using PassThru to get the disk object, then Get-Volume to find the drive letter
+	psCommand := fmt.Sprintf(`
+		$disk = Mount-DiskImage -ImagePath '%s' -PassThru
+		if ($disk) {
+			$volume = Get-Volume -DiskImage $disk
+			if ($volume) {
+				$volume.DriveLetter
+			}
+		}
+	`, absPath)
+	
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psCommand)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("failed to mount ISO: %s", string(exitErr.Stderr))
+		}
+		return "", fmt.Errorf("failed to mount ISO: %v", err)
+	}
+	
+	driveLetter := strings.TrimSpace(string(output))
+	if driveLetter == "" {
+		return "", fmt.Errorf("failed to get drive letter after mounting")
+	}
+	
+	return driveLetter, nil
+}
+
+// dismountISO dismounts an ISO file on Windows using PowerShell's Dismount-DiskImage
+func dismountISO(isoPath string) error {
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("automatic ISO dismounting is only supported on Windows")
+	}
+	
+	// Get absolute path
+	absPath, err := filepath.Abs(isoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %v", err)
+	}
+	
+	psCommand := fmt.Sprintf("Dismount-DiskImage -ImagePath '%s'", absPath)
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psCommand)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to dismount ISO: %s", string(output))
+	}
+	
+	return nil
+}
+
 func handleDismount(config *Config) {
 	if config.isDrive {
 		fmt.Printf("\nNote: Ejecting drives is not yet implemented in this version.\n")
 		fmt.Printf("Please eject drive %s: manually.\n", config.driveLetter)
+	} else if config.mountedISO {
+		// Only dismount if we mounted it
+		fmt.Printf("\nDismounting ISO...\n")
+		if err := dismountISO(config.Path); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to dismount ISO: %v\n", err)
+			fmt.Printf("Please dismount %s manually.\n", config.Path)
+		} else {
+			fmt.Println("ISO dismounted successfully.")
+		}
 	} else {
-		fmt.Printf("\nNote: Dismounting ISOs is not yet implemented in this version.\n")
-		fmt.Printf("Please dismount %s manually.\n", config.Path)
+		// ISO file but we didn't mount it
+		fmt.Printf("\nNote: ISO was not mounted automatically.\n")
+		if config.Path != "" {
+			fmt.Printf("If you mounted %s manually, please dismount it manually.\n", config.Path)
+		}
 	}
 }

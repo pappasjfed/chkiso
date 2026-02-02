@@ -147,6 +147,42 @@ Success: All 3 files verified successfully.
 
 Use `-noverify` to skip content verification if you only want to check the ISO hash or implanted MD5.
 
+### Automatic ISO Mounting (Windows)
+
+**New Feature!** On Windows, chkiso now automatically mounts ISO files for content verification and unmounts them when done.
+
+```bash
+# Automatically mounts, verifies, and unmounts
+chkiso ubuntu-22.04.iso
+
+# The tool will:
+# 1. Mount the ISO to a drive letter (e.g., H:)
+# 2. Verify all checksum files found on the ISO
+# 3. Automatically unmount the ISO when done
+```
+
+**How it works:**
+- Uses PowerShell's `Mount-DiskImage` to mount ISOs
+- Finds all checksum files (*.sha, sha256sum.txt, SHA256SUMS) automatically
+- Verifies all files referenced in the checksum files
+- Cleans up by unmounting the ISO automatically
+
+**Fallback:**
+If automatic mounting fails (requires admin privileges or other issues), the tool will display instructions for manual mounting.
+
+**Manual control:**
+If you prefer to mount manually, you can still use the drive letter:
+```bash
+# Mount manually first
+Mount-DiskImage -ImagePath C:\path\to\image.iso
+
+# Then verify using drive letter
+chkiso H:
+
+# Manually dismount when done
+Dismount-DiskImage -ImagePath C:\path\to\image.iso
+```
+
 #### Verify a drive (Windows):
 
 ```bash
