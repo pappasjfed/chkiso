@@ -44,13 +44,10 @@ deps:
 build-all: windows linux macos
 
 # Windows builds
-windows: windows-amd64 windows-386 windows-arm64
+windows: windows-amd64 windows-arm64
 
 windows-amd64:
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe
-
-windows-386:
-	GOOS=windows GOARCH=386 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-386.exe
 
 windows-arm64:
 	GOOS=windows GOARCH=arm64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-arm64.exe

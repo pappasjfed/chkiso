@@ -20,9 +20,6 @@ jobs:
             goarch: amd64
             output: chkiso-windows-amd64.exe
           - goos: windows
-            goarch: 386
-            output: chkiso-windows-386.exe
-          - goos: windows
             goarch: arm64
             output: chkiso-windows-arm64.exe
           - goos: linux

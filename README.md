@@ -22,7 +22,9 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 
 Download the appropriate binary for your platform from the [Releases](https://github.com/pappasjfed/chkiso/releases) page:
 
-- **Windows**: `chkiso-windows-amd64.exe` (64-bit), `chkiso-windows-386.exe` (32-bit), or `chkiso-windows-arm64.exe` (ARM)
+- **Windows**: `chkiso-windows-amd64.exe` (64-bit) or `chkiso-windows-arm64.exe` (ARM64)
+  - Note: Windows 11 and modern Windows 10 are 64-bit only
+  - 32-bit Windows builds discontinued (Windows 10 32-bit reached end-of-life)
 - **Linux**: `chkiso-linux-amd64` (64-bit), `chkiso-linux-arm64` (ARM 64-bit), `chkiso-linux-arm` (ARM 32-bit), or `chkiso-linux-386` (32-bit)
 - **macOS**: `chkiso-darwin-amd64` (Intel) or `chkiso-darwin-arm64` (Apple Silicon)
 - **FreeBSD**: `chkiso-freebsd-amd64`
@@ -174,10 +176,12 @@ go test -v ./...
 
 | Platform | Architecture | Status |
 |----------|--------------|--------|
-| Windows  | amd64, 386, arm64 | ✅ Fully supported |
+| Windows  | amd64, arm64 | ✅ Fully supported |
 | Linux    | amd64, 386, arm, arm64 | ✅ Fully supported |
 | macOS    | amd64 (Intel), arm64 (Apple Silicon) | ✅ Fully supported |
 | FreeBSD  | amd64 | ✅ Fully supported |
+
+**Note**: Windows 32-bit (386) builds are no longer provided. Windows 11 only supports 64-bit processors, and Windows 10 32-bit has reached end-of-life. All modern Windows installations are 64-bit.
 
 ## Why Go?
 
