@@ -1,41 +1,32 @@
 <#
 .SYNOPSIS
-    Build script for chkiso - compiles PowerShell script to executable.
+    Build script for chkiso tools - compiles PowerShell scripts to executables.
 
 .DESCRIPTION
-    This script compiles chkiso.ps1 to chkiso.exe and places it in the bin/ directory.
-    It also generates a SHA256 checksum file.
-    Optionally downloads utility binaries (checkisomd5.exe, sha256sum.exe) to bin/.
+    This script compiles the PowerShell scripts to executables and places them in the bin/ directory.
+    - sha256media.ps1 -> sha256media.exe (hash calculator)
+    - verifymedia.ps1 -> verifymedia.exe (content verifier)
+    It also generates SHA256 checksum files for each executable.
 
 .PARAMETER Clean
     Clean the bin directory before building.
 
 .PARAMETER SkipChecksum
-    Skip generating the SHA256 checksum file.
-
-.PARAMETER DownloadUtilities
-    Download utility binaries (checkisomd5.exe, sha256sum.exe) to bin/ directory.
-    - checkisomd5.exe: Downloaded from https://github.com/pappasjfed/isomd5sum/releases
-    - sha256sum.exe: Downloaded from GnuWin32 CoreUtils package
+    Skip generating the SHA256 checksum files.
 
 .EXAMPLE
     .\build.ps1
-    Builds chkiso.exe in the bin/ directory
+    Builds all executables in the bin/ directory
 
 .EXAMPLE
     .\build.ps1 -Clean
-    Cleans bin/ directory and builds
-
-.EXAMPLE
-    .\build.ps1 -DownloadUtilities
-    Builds and downloads utility binaries to bin/
+    Cleans bin/ directory and builds all executables
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Clean,
-    [switch]$SkipChecksum,
-    [switch]$DownloadUtilities
+    [switch]$SkipChecksum
 )
 
 $ErrorActionPreference = 'Stop'
@@ -182,64 +173,89 @@ if (-not (Test-Path bin)) {
     Write-Host "✓ bin directory created" -ForegroundColor Green
 }
 
-# Compile the executable
-Write-Host "`nCompiling chkiso.ps1 to bin/chkiso.exe..." -ForegroundColor Yellow
-try {
-    ps2exe -inputFile chkiso.ps1 -outputFile bin/chkiso.exe `
-        -noConsole:$false -title "chkiso" -version "1.0.0.0" `
-        -company "chkiso" -product "chkiso" -copyright "MIT License"
-    
-    if (-not (Test-Path bin/chkiso.exe)) {
-        throw "bin/chkiso.exe was not created"
+# Array of scripts to compile
+$scriptsToCompile = @(
+    @{
+        Script = "sha256media.ps1"
+        Output = "bin/sha256media.exe"
+        Title = "sha256media"
+        Description = "SHA256 Media Hash Calculator"
+    },
+    @{
+        Script = "verifymedia.ps1"
+        Output = "bin/verifymedia.exe"
+        Title = "verifymedia"
+        Description = "Media Content Verifier"
     }
-    
-    $fileSize = (Get-Item bin/chkiso.exe).Length
-    $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
-    Write-Host "✓ Successfully created bin/chkiso.exe ($fileSizeMB MB)" -ForegroundColor Green
-    
-} catch {
-    Write-Error "Failed to compile: $_"
-    exit 1
-}
+)
 
-# Generate SHA256 checksum
-if (-not $SkipChecksum) {
-    Write-Host "`nGenerating SHA256 checksum..." -ForegroundColor Yellow
+$compiledCount = 0
+$failedCompilations = @()
+
+# Compile each executable
+foreach ($script in $scriptsToCompile) {
+    Write-Host "`nCompiling $($script.Script) to $($script.Output)..." -ForegroundColor Yellow
     try {
-        $hash = (Get-FileHash -Path bin/chkiso.exe -Algorithm SHA256).Hash.ToLower()
-        "$hash  chkiso.exe" | Out-File -FilePath "bin/chkiso.exe.sha" -Encoding utf8NoBOM
-        Write-Host "✓ SHA256 checksum saved to bin/chkiso.exe.sha" -ForegroundColor Green
-        Write-Host "  Hash: $hash" -ForegroundColor Gray
+        ps2exe -inputFile $script.Script -outputFile $script.Output `
+            -noConsole:$false -title $script.Title -version "2.0.0.0" `
+            -company "chkiso" -product $script.Title -copyright "MIT License"
+        
+        if (-not (Test-Path $script.Output)) {
+            throw "$($script.Output) was not created"
+        }
+        
+        $fileSize = (Get-Item $script.Output).Length
+        $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
+        Write-Host "✓ Successfully created $($script.Output) ($fileSizeMB MB)" -ForegroundColor Green
+        $compiledCount++
+        
+        # Generate SHA256 checksum
+        if (-not $SkipChecksum) {
+            try {
+                $hash = (Get-FileHash -Path $script.Output -Algorithm SHA256).Hash.ToLower()
+                $exeName = [System.IO.Path]::GetFileName($script.Output)
+                "$hash  $exeName" | Out-File -FilePath "$($script.Output).sha" -Encoding utf8NoBOM
+                Write-Host "  ✓ SHA256 checksum saved to $($script.Output).sha" -ForegroundColor Gray
+            } catch {
+                Write-Warning "Failed to generate checksum for $($script.Output): $_"
+            }
+        }
     } catch {
-        Write-Warning "Failed to generate checksum: $_"
-    }
-}
-
-# Download utility binaries if requested
-if ($DownloadUtilities) {
-    Write-Host "`n=== Downloading Utility Binaries ===" -ForegroundColor Cyan
-    
-    $downloadedCount = 0
-    
-    # Download checkisomd5.exe
-    if (Get-CheckIsoMd5) {
-        $downloadedCount++
-    }
-    
-    # Download sha256sum.exe
-    if (Get-Sha256Sum) {
-        $downloadedCount++
-    }
-    
-    if ($downloadedCount -eq 0) {
-        Write-Warning "No utilities were downloaded successfully"
-    } else {
-        Write-Host "`n✓ Downloaded $downloadedCount utility binary(ies)" -ForegroundColor Green
+        Write-Error "Failed to compile $($script.Script): $_"
+        $failedCompilations += $script.Script
     }
 }
 
 Write-Host "`n=== Build Complete ===" -ForegroundColor Cyan
-Write-Host "`nOutput files:" -ForegroundColor Yellow
+
+if ($failedCompilations.Count -gt 0) {
+    Write-Host "`nFailed to compile:" -ForegroundColor Red
+    foreach ($failed in $failedCompilations) {
+        Write-Host "  - $failed" -ForegroundColor Red
+    }
+}
+
+if ($compiledCount -gt 0) {
+    Write-Host "`nSuccessfully compiled $compiledCount executable(s):" -ForegroundColor Green
+    Write-Host "`nOutput files:" -ForegroundColor Yellow
+    Get-ChildItem bin/ -Filter *.exe | ForEach-Object {
+        Write-Host "  - bin/$($_.Name)" -ForegroundColor Gray
+    }
+    
+    if (-not $SkipChecksum) {
+        Write-Host "`nChecksum files:" -ForegroundColor Yellow
+        Get-ChildItem bin/ -Filter *.sha | ForEach-Object {
+            Write-Host "  - bin/$($_.Name)" -ForegroundColor Gray
+        }
+    }
+    
+    Write-Host "`nTo test the executables:" -ForegroundColor Yellow
+    Write-Host "  .\bin\sha256media.exe test\test.iso" -ForegroundColor White
+    Write-Host "  .\bin\verifymedia.exe test\test.iso" -ForegroundColor White
+} else {
+    Write-Error "No executables were compiled successfully"
+    exit 1
+}
 Get-ChildItem bin/ | ForEach-Object {
     Write-Host "  - bin/$($_.Name)" -ForegroundColor Gray
 }
