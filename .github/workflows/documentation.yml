@@ -6,12 +6,12 @@ on:
     branches: [main]
     paths:
       - '**.md'
-      - 'chkiso.ps1'
+      - 'main.go'
       - '.github/workflows/documentation.yml'
   pull_request:
     paths:
       - '**.md'
-      - 'chkiso.ps1'
+      - 'main.go'
   workflow_dispatch:
 
 jobs:
@@ -52,33 +52,28 @@ jobs:
           
           echo "✓ README validation complete"
 
-      - name: Check PowerShell documentation
-        shell: pwsh
+      - name: Check Go documentation
         run: |
-          Write-Host "Checking PowerShell help documentation..."
+          echo "Checking Go code documentation..."
           
-          # Check if the script has proper help documentation
-          $helpContent = Get-Help ./chkiso.ps1 -Full
+          # Set up Go
+          sudo apt-get update && sudo apt-get install -y golang-1.21 || true
+          export PATH=/usr/lib/go-1.21/bin:$PATH
           
-          if ($null -eq $helpContent.Synopsis -or $helpContent.Synopsis -eq '') {
-            Write-Warning "Script missing SYNOPSIS in help documentation"
-          } else {
-            Write-Host "✓ SYNOPSIS found"
-          }
+          # Check if main.go has proper documentation
+          if ! grep -q "^// chkiso" main.go; then
+            echo "Warning: main.go missing package documentation"
+          else
+            echo "✓ Package documentation found"
+          fi
           
-          if ($null -eq $helpContent.Description -or $helpContent.Description.Length -eq 0) {
-            Write-Warning "Script missing DESCRIPTION in help documentation"
-          } else {
-            Write-Host "✓ DESCRIPTION found"
-          }
+          # Check for function documentation
+          if ! grep -q "^// .*function" main.go && ! grep -q "^// .*verif" main.go; then
+            echo "Note: Consider adding more function documentation"
+          fi
           
-          if ($null -eq $helpContent.Parameters -or $helpContent.Parameters.Count -eq 0) {
-            Write-Warning "Script missing PARAMETER documentation"
-          } else {
-            Write-Host "✓ PARAMETER documentation found ($($helpContent.Parameters.Count) parameters)"
-          }
-          
-          Write-Host "`n✓ PowerShell documentation check complete"
+          echo ""
+          echo "✓ Go documentation check complete"
 
   generate-docs:
     name: Generate Documentation
@@ -93,66 +88,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Generate API documentation
-        shell: pwsh
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Generate Go documentation
         run: |
-          Write-Host "Generating PowerShell help documentation..."
+          echo "Generating Go documentation..."
           
           # Create docs directory
-          New-Item -ItemType Directory -Force -Path "docs" | Out-Null
+          mkdir -p docs
           
-          # Generate help as markdown
-          $help = Get-Help ./chkiso.ps1 -Full
+          # Generate usage documentation from help output
+          go build -o chkiso
+          ./chkiso -help > docs/USAGE.txt 2>&1 || true
           
-          $markdown = @"
-          # chkiso PowerShell Script Documentation
-          
-          ## Synopsis
-          $($help.Synopsis)
-          
-          ## Description
-          $($help.Description | ForEach-Object { $_.Text })
-          
-          ## Parameters
-          
-          $($help.Parameters.parameter | ForEach-Object {
-          @"
-          ### -$($_.name)
-          **Type:** $($_.type.name)
-          **Required:** $($_.required)
-          
-          $($_.description | ForEach-Object { $_.Text })
-          
-          "@
-          })
-          
-          ## Examples
-          
-          ```powershell
-          # Basic usage
-          .\chkiso.ps1 path\to\image.iso
-          
-          # Check against hash
-          .\chkiso.ps1 path\to\image.iso <sha256-hash>
-          
-          # Check against hash file
-          .\chkiso.ps1 path\to\image.iso -ShaFile path\to\hashfile.sha
-          
-          # Enable MD5 check
-          .\chkiso.ps1 path\to\image.iso -MD5
-          
-          # Skip internal verification
-          .\chkiso.ps1 path\to\image.iso -NoVerify
-          ```
-          
-          ## Notes
-          
-          Generated from PowerShell help documentation on $(Get-Date -Format "yyyy-MM-dd")
-          
-          "@
-          
-          $markdown | Out-File -FilePath "docs/API.md" -Encoding utf8NoBOM
-          Write-Host "✓ Documentation generated at docs/API.md"
+          echo "✓ Documentation generated at docs/USAGE.txt"
 
       - name: Create documentation index
         run: |
@@ -163,9 +115,8 @@ jobs:
           
           ## Contents
           
-          - [API Documentation](API.md) - Complete PowerShell script documentation
           - [README](../README.md) - Main project documentation
-          - [Code Signing](../CODE_SIGNING.md) - Code signing setup guide
+          - [Usage](USAGE.txt) - Command-line usage and options
           
           ## Quick Links
           

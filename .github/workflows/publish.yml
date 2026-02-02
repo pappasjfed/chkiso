@@ -14,7 +14,7 @@ on:
 jobs:
   publish-github:
     name: Publish to GitHub Releases
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
@@ -28,32 +28,30 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           echo "Fetching release assets for ${{ github.event.inputs.tag }}"
-          # Assets are already attached by build-release workflow
+          # Assets are already attached by release workflow
           echo "Assets available in release"
 
       - name: Verify release
-        shell: pwsh
         run: |
-          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
-          Write-Host "Verifying release for tag: $tag"
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "Verifying release for tag: $tag"
           
           # Check if release exists
-          $release = gh release view $tag --json name,tagName,assets
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Release $tag not found"
+          if ! gh release view "$tag" --json name,tagName,assets > /dev/null 2>&1; then
+            echo "Release $tag not found"
             exit 1
-          }
+          fi
           
-          Write-Host "✓ Release verified: $tag"
-          Write-Host "Assets:"
-          $release | ConvertFrom-Json | Select-Object -ExpandProperty assets | Format-Table
+          echo "✓ Release verified: $tag"
+          echo "Assets:"
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name) (\(.size) bytes)"'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish-powershell-gallery:
-    name: Prepare for PowerShell Gallery (Future)
-    runs-on: windows-latest
-    if: false  # Disabled - enable when module manifest is created
+  publish-go-packages:
+    name: Prepare for Go Package Registries (Future)
+    runs-on: ubuntu-latest
+    if: false  # Disabled - enable when configured
     permissions:
       contents: read
 
@@ -61,13 +59,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Placeholder for PowerShell Gallery publishing
+      - name: Placeholder for Go package publishing
         run: |
-          echo "PowerShell Gallery publishing not yet configured"
-          echo "To enable:"
-          echo "1. Create a module manifest (.psd1)"
-          echo "2. Add PSGallery API key to secrets"
-          echo "3. Enable this job"
+          echo "Go package publishing not yet configured"
+          echo "Potential targets:"
+          echo "- Go module proxy (already works via GitHub)"
+          echo "- Docker Hub (for containerized version)"
+          echo "- Homebrew tap (for macOS users)"
 
   publish-chocolatey:
     name: Prepare for Chocolatey (Future)
@@ -106,8 +104,8 @@ jobs:
           - ✓ GitHub Releases
           
           ### Future Publishing Targets
-          - [ ] PowerShell Gallery (not yet configured)
-          - [ ] Chocolatey (not yet configured)
+          - [ ] Go package registries (Docker Hub, Homebrew, etc.)
+          - [ ] Chocolatey (Windows package manager)
           
           ### Release Information
           - Tag: ${{ github.event.inputs.tag || github.ref_name }}

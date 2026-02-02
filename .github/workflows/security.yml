@@ -30,7 +30,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: 'javascript'  # PowerShell analyzed as JavaScript
+          languages: 'go'
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
@@ -72,9 +72,9 @@ jobs:
           head: HEAD
           extra_args: --only-verified
 
-  powershell-security:
-    name: PowerShell Security Analysis
-    runs-on: windows-latest
+  go-security:
+    name: Go Security Analysis
+    runs-on: ubuntu-latest
     permissions:
       contents: read
 
@@ -82,42 +82,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install PSScriptAnalyzer
-        shell: pwsh
-        run: |
-          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-          Import-Module PSScriptAnalyzer
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
 
-      - name: Security-focused PSScriptAnalyzer scan
-        shell: pwsh
+      - name: Run go vet
         run: |
-          Write-Host "Running security-focused PowerShell analysis..."
+          echo "Running go vet security analysis..."
+          go vet ./...
+          echo "✓ No issues found by go vet"
+
+      - name: Check for common security issues
+        run: |
+          echo "Checking for common security patterns..."
           
-          $results = Invoke-ScriptAnalyzer -Path chkiso.ps1 -Severity Error,Warning `
-            -IncludeRule PSAvoid*,PSUse* -Recurse
+          # Check for potential issues in the code
+          if grep -r "os.Chmod.*0777" . --include="*.go"; then
+            echo "Warning: Found overly permissive file permissions"
+          fi
           
-          if ($results.Count -gt 0) {
-            Write-Host "`nFound $($results.Count) security/best practice issue(s):"
-            $results | Format-Table -Property Severity,RuleName,Message,Line -AutoSize
-            
-            # Fail on security-related errors
-            $securityErrors = $results | Where-Object { 
-              $_.Severity -eq 'Error' -or 
-              $_.RuleName -match 'PSAvoidUsing(Plain|ConvertTo|Invoke|WriteHost)' 
-            }
-            
-            if ($securityErrors.Count -gt 0) {
-              Write-Error "Found $($securityErrors.Count) security error(s)"
-              exit 1
-            }
-          } else {
-            Write-Host "✓ No security issues found"
-          }
+          if grep -r "ioutil.WriteFile.*0777" . --include="*.go"; then
+            echo "Warning: Found overly permissive file creation"
+          fi
+          
+          echo "✓ Security pattern check complete"
 
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [codeql, powershell-security, secret-scan]
+    needs: [codeql, go-security, secret-scan]
     if: always()
     permissions:
       contents: read
@@ -130,7 +124,7 @@ jobs:
           
           ### Status
           - CodeQL: ${{ needs.codeql.result }}
-          - PowerShell Security: ${{ needs.powershell-security.result }}
+          - Go Security: ${{ needs.go-security.result }}
           - Secret Scanning: ${{ needs.secret-scan.result }}
           
           ### Notes
