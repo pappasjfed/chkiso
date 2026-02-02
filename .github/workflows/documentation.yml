@@ -1,0 +1,134 @@
+---
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'main.go'
+      - '.github/workflows/documentation.yml'
+  pull_request:
+    paths:
+      - '**.md'
+      - 'main.go'
+  workflow_dispatch:
+
+jobs:
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for broken links in markdown
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
+          config-file: '.github/workflows/markdown-link-check-config.json'
+        continue-on-error: true
+
+      - name: Validate README structure
+        run: |
+          echo "Validating README.md structure..."
+          
+          # Check if README has required sections
+          if ! grep -q "## Usage" README.md; then
+            echo "Warning: README.md missing '## Usage' section"
+          fi
+          
+          if ! grep -q "## Building" README.md; then
+            echo "Warning: README.md missing '## Building' section"
+          fi
+          
+          if ! grep -q "## Testing" README.md; then
+            echo "Warning: README.md missing '## Testing' section"
+          fi
+          
+          echo "✓ README validation complete"
+
+      - name: Check Go documentation
+        run: |
+          echo "Checking Go code documentation..."
+          
+          # Set up Go
+          sudo apt-get update && sudo apt-get install -y golang-1.21 || true
+          export PATH=/usr/lib/go-1.21/bin:$PATH
+          
+          # Check if main.go has proper documentation
+          if ! grep -q "^// chkiso" main.go; then
+            echo "Warning: main.go missing package documentation"
+          else
+            echo "✓ Package documentation found"
+          fi
+          
+          # Check for function documentation
+          if ! grep -q "^// .*function" main.go && ! grep -q "^// .*verif" main.go; then
+            echo "Note: Consider adding more function documentation"
+          fi
+          
+          echo ""
+          echo "✓ Go documentation check complete"
+
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Generate Go documentation
+        run: |
+          echo "Generating Go documentation..."
+          
+          # Create docs directory
+          mkdir -p docs
+          
+          # Generate usage documentation from help output
+          go build -o chkiso
+          ./chkiso -help > docs/USAGE.txt 2>&1 || true
+          
+          echo "✓ Documentation generated at docs/USAGE.txt"
+
+      - name: Create documentation index
+        run: |
+          cat > docs/index.md << 'EOF'
+          # chkiso Documentation
+          
+          Welcome to the chkiso documentation!
+          
+          ## Contents
+          
+          - [README](../README.md) - Main project documentation
+          - [Usage](USAGE.txt) - Command-line usage and options
+          
+          ## Quick Links
+          
+          - [GitHub Repository](https://github.com/pappasjfed/chkiso)
+          - [Releases](https://github.com/pappasjfed/chkiso/releases)
+          - [Issues](https://github.com/pappasjfed/chkiso/issues)
+          EOF
+          
+          echo "✓ Documentation index created"
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/
