@@ -366,6 +366,8 @@ func verifyContents(config *Config) {
 		return
 	}
 	
+	fmt.Printf("Searching for checksum files (*.sha, sha256sum.txt, SHA256SUMS) in %s...\n", mountPath)
+	
 	// Find checksum files
 	checksumFiles, err := findChecksumFiles(mountPath)
 	if err != nil {
@@ -378,11 +380,22 @@ func verifyContents(config *Config) {
 		return
 	}
 	
+	// Report all found checksum files
+	fmt.Printf("\nFound %d checksum file(s):\n", len(checksumFiles))
+	for i, cf := range checksumFiles {
+		relPath, err := filepath.Rel(mountPath, cf)
+		if err != nil {
+			relPath = cf
+		}
+		fmt.Printf("  %d. %s\n", i+1, relPath)
+	}
+	fmt.Println()
+	
 	totalFiles := 0
 	failedFiles := 0
 	
 	for _, checksumFile := range checksumFiles {
-		fmt.Printf("\nProcessing checksum file: %s\n", checksumFile)
+		fmt.Printf("Processing checksum file: %s\n", filepath.Base(checksumFile))
 		baseDir := filepath.Dir(checksumFile)
 		
 		file, err := os.Open(checksumFile)
@@ -437,19 +450,25 @@ func verifyContents(config *Config) {
 				failedFiles++
 			}
 		}
+		fmt.Println()  // Add blank line between checksum files
 	}
 	
-	fmt.Println("\n--- Verification Summary ---")
+	fmt.Println("--- Verification Summary ---")
+	fmt.Printf("Checksum files processed: %d\n", len(checksumFiles))
+	fmt.Printf("Total files verified: %d\n", totalFiles)
 	if failedFiles == 0 && totalFiles > 0 {
-		fmt.Printf("\033[32mSuccess: All %d files verified.\033[0m\n", totalFiles)
+		fmt.Printf("\033[32mSuccess: All %d files verified successfully.\033[0m\n", totalFiles)
 	} else if totalFiles == 0 {
 		fmt.Println("No files were verified.")
 	} else {
-		fmt.Printf("\033[31mFailure: %d out of %d files failed.\033[0m\n", failedFiles, totalFiles)
+		fmt.Printf("\033[31mFailure: %d out of %d files failed verification.\033[0m\n", failedFiles, totalFiles)
 		hasErrors = true
 	}
 }
 
+// findChecksumFiles recursively searches for ALL checksum files in the given directory tree.
+// It finds files matching: *.sha, sha256sum.txt, or SHA256SUMS (case-insensitive).
+// This ensures all checksum files on the media are discovered and processed.
 func findChecksumFiles(rootPath string) ([]string, error) {
 	var checksumFiles []string
 	

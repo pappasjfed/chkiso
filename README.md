@@ -97,6 +97,46 @@ chkiso image.iso -md5
 chkiso image.iso -noverify
 ```
 
+### Content Verification
+
+By default, chkiso performs **content verification** when verifying drives (e.g., `chkiso E:`). This feature:
+
+- **Recursively searches** for ALL checksum files on the media:
+  - Files ending with `.sha` (e.g., `files.sha`, `docs.sha`, `packages.sha`)
+  - Files named `sha256sum.txt` or `SHA256SUMS`
+- **Processes each checksum file** found in any directory or subdirectory
+- **Validates all files** referenced in each checksum file
+- **Reports comprehensive results** showing which checksum files were found and processed
+
+This ensures that if your media contains multiple checksum files in different directories (common for complex distributions or multi-component media), ALL of them will be found and verified automatically.
+
+**Example output:**
+```
+--- Verifying Contents ---
+Searching for checksum files (*.sha, sha256sum.txt, SHA256SUMS) in E:\...
+
+Found 3 checksum file(s):
+  1. main.sha
+  2. docs/docs.sha
+  3. software/packages.sha
+
+Processing checksum file: main.sha
+Verifying: readme.txt -> OK
+
+Processing checksum file: docs.sha
+Verifying: manual.pdf -> OK
+
+Processing checksum file: packages.sha
+Verifying: installer.exe -> OK
+
+--- Verification Summary ---
+Checksum files processed: 3
+Total files verified: 3
+Success: All 3 files verified successfully.
+```
+
+Use `-noverify` to skip content verification if you only want to check the ISO hash or implanted MD5.
+
 #### Verify a drive (Windows):
 
 ```bash
