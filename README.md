@@ -91,6 +91,16 @@ chkiso image.iso -md5
 
 **Advantage**: No FIPS restrictions! Works on all systems regardless of security policies.
 
+**Note for Windows**: Implanted MD5 check requires direct ISO file access. If you have a mounted ISO (e.g., drive H:), use the original ISO file path instead:
+```bash
+# This works
+chkiso C:\path\to\image.iso -md5
+
+# This will skip MD5 check (mounted ISOs don't support device-level access)
+chkiso H: -md5
+```
+Content verification will still work fine with mounted drives.
+
 #### Skip internal file verification:
 
 ```bash

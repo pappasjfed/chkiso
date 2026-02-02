@@ -547,7 +547,13 @@ func checkImplantedMD5(config *Config) (*MD5Result, error) {
 			fileLength, err = file.Seek(0, io.SeekEnd)
 			if err != nil {
 				file.Close()
-				return nil, fmt.Errorf("cannot determine drive size: %v", err)
+				// This typically happens with virtual/mounted drives (like mounted ISOs)
+				// which don't support device-level operations
+				return nil, fmt.Errorf("drive %s: does not support device-level access (likely a virtual/mounted drive).\n\n"+
+					"Implanted MD5 check requires direct access to the ISO file.\n"+
+					"To verify the implanted MD5, use the ISO file directly:\n"+
+					"  Example: chkiso path\\to\\image.iso -md5\n\n"+
+					"(Content verification will still work with the mounted drive)", config.driveLetter)
 			}
 			// Seek back to start
 			if _, err := file.Seek(0, io.SeekStart); err != nil {
