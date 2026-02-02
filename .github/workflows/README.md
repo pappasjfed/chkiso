@@ -1,62 +1,54 @@
 # GitHub Actions Workflows
 
-This directory contains the comprehensive GitHub Actions workflows for the chkiso project.
+This directory contains the GitHub Actions workflows for the chkiso Go project.
 
 ## Workflows Overview
 
-### 🔄 Continuous Integration (`ci.yml`)
+### 🏗️ Build Go Binary (`build-go.yml`)
 **Trigger:** Pull requests, pushes to main, manual dispatch
 
-Comprehensive CI pipeline that includes:
-- **Linting**: PowerShell script analysis with PSScriptAnalyzer
-- **Testing**: Builds and tests the executable with multiple verification methods
-- **Version Validation**: Ensures version consistency across the project
+Builds and tests the Go binary:
+- **Build**: Compiles the Go binary for testing
+- **Testing**: Runs comprehensive tests with multiple verification methods
+- **Cross-platform Build**: Builds for all supported platforms (Windows, Linux, macOS, FreeBSD)
 
-### 🏗️ Build and Release (`build-release.yml`)
+### 🚀 Release (`release.yml`)
 **Trigger:** Release creation, manual dispatch
 
-Builds the Windows executable with:
-- Dynamic version extraction from git tags
-- PowerShell to EXE compilation with ps2exe
-- Optional code signing (if certificates configured)
-- SHA256 checksum generation
-- Automatic attachment to GitHub releases
-
-### 🚀 Create Release (`release.yml`)
-**Trigger:** Manual dispatch with version input
-
-Complete release workflow that:
-- Validates semantic version format
-- Generates changelog from git commits
-- Creates and pushes git tags
-- Creates GitHub release with release notes
+Builds multi-platform binaries and attaches to releases:
+- Builds for Windows (amd64, arm64)
+- Builds for Linux (amd64, 386, arm64, arm)
+- Builds for macOS (amd64, arm64)
+- Builds for FreeBSD (amd64)
+- Generates SHA256 checksums for each binary
+- Automatically attaches all binaries to GitHub releases
 
 ### 📦 Publish Package (`publish.yml`)
 **Trigger:** Release published, manual dispatch
 
 Handles package publishing to:
 - ✅ GitHub Releases (active)
-- 📋 PowerShell Gallery (future - currently placeholder)
-- 📋 Chocolatey (future - currently placeholder)
+- 📋 Go package registries (future - Docker Hub, Homebrew, etc.)
+- 📋 Chocolatey (future - Windows package manager)
 
 ### 📚 Documentation (`documentation.yml`)
-**Trigger:** Changes to markdown files or scripts, manual dispatch
+**Trigger:** Changes to markdown files or Go code, manual dispatch
 
 Documentation pipeline that:
 - Validates markdown links
 - Checks README structure
-- Validates PowerShell help documentation
-- Generates API documentation
+- Validates Go code documentation
+- Generates usage documentation
 - Creates documentation index
 
 ### 🔒 Security Scan (`security.yml`)
 **Trigger:** Pushes to main, pull requests, daily schedule, manual dispatch
 
 Security scanning including:
-- CodeQL analysis
+- CodeQL analysis for Go
 - Dependency review (PRs only)
 - Secret scanning with TruffleHog
-- PowerShell-specific security analysis
+- Go vet security analysis
 
 ### 🧪 Test (`test.yml`)
 **Trigger:** Pull requests, pushes to main, manual dispatch

@@ -20,9 +20,8 @@ This guide helps you quickly get started with the chkiso CI/CD system.
 
 4. **Create a Pull Request**
    - GitHub Actions will automatically:
-     - ✓ Lint your PowerShell code
-     - ✓ Build and test the executable
-     - ✓ Run security scans
+     - ✓ Build and test the Go binary
+     - ✓ Run security scans (CodeQL, go vet)
      - ✓ Validate documentation
 
 5. **Review and merge**
@@ -33,21 +32,20 @@ This guide helps you quickly get started with the chkiso CI/CD system.
 
 ### Creating a Release
 
-#### Step 1: Trigger the Release Workflow
+#### Step 1: Create a GitHub Release
 
-1. Go to [GitHub Actions](https://github.com/pappasjfed/chkiso/actions)
-2. Click on **"Create Release"** workflow
-3. Click **"Run workflow"** button
-4. Fill in the form:
-   - **Version**: Enter semantic version (e.g., `1.0.0`, `1.1.0`, `2.0.0-beta`)
-   - **Pre-release**: Check if this is a pre-release
+1. Go to [GitHub Releases](https://github.com/pappasjfed/chkiso/releases)
+2. Click **"Draft a new release"**
+3. Click **"Choose a tag"** and create a new tag (e.g., `v1.0.0`, `v1.1.0`)
+4. Fill in the release title and description
+5. Click **"Publish release"**
 
 #### Step 2: Automatic Build
 
-Once the release is created, the **Build and Release** workflow automatically:
-- ✓ Extracts version from the git tag
-- ✓ Compiles `chkiso.ps1` to `chkiso.exe` with version number
-- ✓ Signs the executable (if certificates configured)
+Once the release is created, the **Release** workflow automatically:
+- ✓ Builds Go binaries for all platforms (Windows, Linux, macOS, FreeBSD)
+- ✓ Generates SHA256 checksums for each binary
+- ✓ Attaches all binaries and checksums to the release
 - ✓ Generates SHA256 checksums
 - ✓ Attaches all files to the GitHub release
 
@@ -98,50 +96,56 @@ Check workflow status with badges in README.md:
 
 ### Run Tests Locally
 
-```powershell
-# Install dependencies
-Install-Module -Name ps2exe -Force
+```bash
+# Build the binary
+go build -o chkiso
 
-# Build executable
-ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
-  -noConsole:$false -title "chkiso" -version "1.0.0.0"
+# Run basic tests
+./chkiso test/test.iso -noverify
 
-# Run tests
-.\chkiso.exe test\test.iso
+# Test with hash verification
+./chkiso test/test.iso $(cat test/test.iso.sha | cut -d' ' -f1) -noverify
+
+# Test MD5 check
+./chkiso test/test.iso -md5 -noverify
+```
+
+### Build for All Platforms
+
+```bash
+# Build for current platform
+make build
+
+# Build for all platforms
+make build-all
+
+# Or build manually
+GOOS=windows GOARCH=amd64 go build -o chkiso-windows-amd64.exe
+GOOS=linux GOARCH=amd64 go build -o chkiso-linux-amd64
+GOOS=darwin GOARCH=arm64 go build -o chkiso-darwin-arm64
 ```
 
 ### Lint Code Locally
 
-```powershell
-# Install PSScriptAnalyzer
-Install-Module -Name PSScriptAnalyzer -Force
+```bash
+# Run go vet
+go vet ./...
 
-# Run linter
-Invoke-ScriptAnalyzer -Path chkiso.ps1 -Recurse
+# Run go fmt
+go fmt ./...
+
+# Check formatting
+test -z $(gofmt -l .)
 ```
 
-### Generate Documentation Locally
+### Run All Tests
 
-```powershell
-# View help
-Get-Help .\chkiso.ps1 -Full
+```bash
+# Run Go tests (if any exist)
+go test ./...
 ```
 
 ## Security
-
-### Code Signing Setup
-
-If you have a code signing certificate:
-
-1. Set up secrets in GitHub:
-   - `CERTIFICATE` - Base64-encoded PFX
-   - `CERT_PASSWORD` - Certificate password
-
-2. Set up variables:
-   - `CERTHASH` - Certificate SHA1 thumbprint
-   - `CERTNAME` - Certificate subject name
-
-See [CODE_SIGNING.md](../CODE_SIGNING.md) for details.
 
 ### Security Scans
 
@@ -150,6 +154,12 @@ Security scans run:
 - ✓ On every push to main
 - ✓ Daily at 2 AM UTC
 - ✓ Manually via workflow dispatch
+
+Includes:
+- CodeQL analysis for Go
+- Dependency review
+- Secret scanning
+- Go vet security checks
 
 ## Troubleshooting
 
