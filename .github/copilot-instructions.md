@@ -2,132 +2,211 @@
 
 ## Repository Overview
 
-This repository contains `chkiso`, a PowerShell-based tool for verifying ISO image integrity using multiple validation methods. The tool checks SHA256 hashes, MD5 implants, and internal file checksums. It's compiled into a Windows executable using ps2exe for distribution.
+This repository contains `chkiso`, a cross-platform Go tool for verifying ISO image integrity using multiple validation methods. The tool checks SHA256 hashes, MD5 implants, and internal file checksums. It compiles to native binaries for Windows, Linux, macOS, and FreeBSD.
 
 ## Technology Stack
 
-- **Language**: PowerShell (`.ps1`)
-- **Compilation**: ps2exe module (PowerShell to executable)
-- **Runtime**: Windows (PowerShell 5.1+ or PowerShell Core)
-- **CI/CD**: GitHub Actions
-- **Testing**: PowerShell scripts on Windows runners
+- **Language**: Go 1.21+
+- **Build System**: Go toolchain + Makefile
+- **Runtime**: Cross-platform (Windows, Linux, macOS, FreeBSD)
+- **CI/CD**: GitHub Actions with multi-platform builds
+- **Testing**: Go testing framework + integration tests
 
 ## Project Structure
 
-- `chkiso.ps1` - Main PowerShell script with verification logic
+- `main.go` - Main Go source code with verification logic
+- `go.mod` / `go.sum` - Go module dependencies
+- `Makefile` - Build automation for multiple platforms
 - `test/` - Test files including test ISO image and hash files
-- `.github/workflows/` - CI/CD workflows for testing and releases
-- `CODE_SIGNING.md` - Documentation for code signing setup
+- `.github/workflows/` - CI/CD workflows for build, test, release, security
+- `WORKFLOWS.md` - Comprehensive workflow documentation
 - `README.md` - User-facing documentation
 
 ## Building and Testing
 
+### Building
+Build for your current platform:
+
+```bash
+# Using Go directly
+go build -o chkiso
+
+# Or using Makefile
+make build
+
+# Build for all platforms
+make build-all
+
+# Build for specific platforms
+make windows    # All Windows targets
+make linux      # All Linux targets
+make macos      # All macOS targets
+```
+
 ### Testing
 Tests run automatically on pull requests and pushes to main. To test locally:
 
-```powershell
-# Run the script directly with test ISO
-.\chkiso.ps1 test\test.iso
+```bash
+# Build the binary
+go build -o chkiso
+
+# Run with test ISO
+./chkiso test/test.iso
 
 # Test with hash verification
-.\chkiso.ps1 test\test.iso -ShaFile test\test.iso.sha
+./chkiso test/test.iso -shafile test/test.iso.sha
 
 # Test with MD5 check
-.\chkiso.ps1 test\test.iso -MD5
-```
+./chkiso test/test.iso -md5
 
-### Building
-The executable is built automatically via GitHub Actions. To build manually:
+# Test with hash string (using env var from test.iso.sha)
+./chkiso test/test.iso $(grep -o '^[a-f0-9]\{64\}' test/test.iso.sha) -noverify
 
-```powershell
-# Install ps2exe module
-Install-Module -Name ps2exe -Force
-
-# Compile to executable
-ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe `
-  -noConsole:$false -title "chkiso" -version "1.0.0.0" `
-  -company "chkiso" -product "chkiso" -copyright "MIT License"
+# Run Go tests (if any exist)
+go test -v ./...
 ```
 
 ## Code Style and Conventions
 
-### PowerShell Best Practices
-- Use approved PowerShell verbs (Get-, Set-, Test-, etc.)
-- Follow PascalCase for function names
-- Use proper parameter declarations with `[CmdletBinding()]`
-- Include parameter validation and help documentation
-- Use `Write-Host` for user-facing messages
-- Use `Write-Error` for errors
-- Properly dispose of streams and cryptographic objects
+### Go Best Practices
+- Follow standard Go formatting (`gofmt`, `go fmt`)
+- Use meaningful package, function, and variable names
+- Keep functions focused and single-purpose
+- Handle errors explicitly - don't ignore them
+- Use idiomatic Go patterns and conventions
+- Add comments for exported functions and complex logic
+- Use Go standard library when possible
 
 ### Error Handling
-- Track errors using `$script:hasErrors` flag
+- Track errors using `hasErrors` global flag
 - Exit with proper exit codes (0 for success, 1 for failure)
 - Provide clear, actionable error messages to users
+- Use `fmt.Fprintf(os.Stderr, ...)` for error output
+- Log important operations and their results
 
-### ps2exe Compatibility
-- **Important**: The script must work when compiled to `.exe`
-- Avoid cmdlets that don't work in ps2exe (e.g., `Get-FileHash`)
-- Use .NET classes directly when needed (e.g., `FileStream`, `SHA256`)
-- Drive letter access is not supported in compiled executables due to ps2exe limitations
+### Cross-Platform Considerations
+- **Important**: Code must work on Windows, Linux, macOS, and FreeBSD
+- Use `filepath` package for path operations (handles OS differences)
+- Test platform-specific features (e.g., drive letters on Windows)
+- Use `runtime.GOOS` and `runtime.GOARCH` for platform detection
+- Be mindful of file permissions and path separators
 
-### Parameter Design
-- Maintain backward compatibility with positional parameters
-- Use descriptive aliases for common use cases
-- Document limitations (e.g., drive letter access in compiled exe)
+### Command-Line Interface
+- Support both flag-based and positional arguments where appropriate
+- Maintain backward compatibility with existing command patterns
+- Use descriptive flag names and aliases
+- Document all flags and options in help text
 
 ## Testing Requirements
 
 When making changes:
-1. Test with the script directly (`.\chkiso.ps1`)
-2. Test after compilation to `.exe`
+1. Build the binary: `go build -o chkiso`
+2. Test with the test ISO: `./chkiso test/test.iso`
 3. Verify all verification modes work:
    - Default (SHA256 display + content verification)
-   - SHA256 hash string verification
+   - SHA256 hash string verification (positional and flag)
    - SHA256 hash file verification
    - MD5 implant check
-   - Content-only verification
-4. Ensure proper exit codes (0 = success, 1 = failure)
+   - Content-only verification (skip other checks)
+4. Test cross-platform if possible (at minimum, ensure code is portable)
+5. Ensure proper exit codes (0 = success, 1 = failure)
+6. Run `go test` if unit tests exist
 
 ## GitHub Actions Workflows
 
-### test.yml
+### build-go.yml
 Runs on every PR and push to main:
-- Compiles the script to executable
-- Optionally signs the executable (if certificates configured)
-- Runs comprehensive tests with test.iso
-- Tests mounted ISO scenarios (script only)
+- Sets up Go 1.21+ environment
+- Builds the binary
+- Tests basic functionality with test.iso
+- Tests all verification modes (hash string, hash file, MD5, content)
+- Validates exit codes
 
-### build-release.yml
+### release.yml
 Runs on releases:
-- Compiles and optionally signs executable
-- Attaches artifacts to GitHub releases
+- Builds binaries for all supported platforms:
+  - Windows: amd64, arm64
+  - Linux: amd64, 386, arm64, arm
+  - macOS: amd64, arm64
+  - FreeBSD: amd64
+- Generates SHA256 checksums for each binary
+- Attaches all binaries and checksums to GitHub releases
+
+### security.yml
+Runs on push, PR, and scheduled (daily):
+- CodeQL analysis for Go code
+- Dependency review (PR only)
+- Secret scanning with TruffleHog
+- Go security analysis with govulncheck and gosec
+
+### publish.yml
+Publishes documentation and artifacts when needed
+
+### documentation.yml
+Validates and checks documentation including:
+- Markdown link checking
+- Documentation formatting
 
 ## Important Notes
 
-### Known Limitations
-- Compiled `.exe` cannot access drive letters (mounted ISOs or physical drives) due to ps2exe Win32 device path limitations
-- Users should use ISO file paths directly with the `.exe`
-- The PowerShell script (`.ps1`) supports both file paths and drive letters
+### Cross-Platform Support
+- Binary works on Windows, Linux, macOS, and FreeBSD
+- No dependencies required - statically linked binaries
+- No FIPS restrictions - MD5 works on all platforms
+- Automatic ISO mounting on Windows using PowerShell
+
+### Platform-Specific Features
+- **Windows**: Supports drive letters (e.g., `E:`) and automatic ISO mounting
+- **Linux/Unix**: Requires mount points or direct ISO file paths
+- **All platforms**: Direct ISO file access always works
 
 ### Security Considerations
-- Code signing is optional but recommended for distribution
-- See `CODE_SIGNING.md` for setup instructions
-- SHA256 checksums are generated for all releases
+- CodeQL scanning runs automatically on all PRs
+- Dependency scanning with Dependabot
+- Secret scanning with TruffleHog
+- Go security analysis with gosec and govulncheck
+- SHA256 checksums generated for all releases
 
 ## Making Changes
 
-1. Modify `chkiso.ps1` with your changes
-2. Test locally with PowerShell script
-3. Verify compilation succeeds: `ps2exe -inputFile chkiso.ps1 -outputFile chkiso.exe ...`
-4. Test the compiled executable
+1. Modify `main.go` with your changes
+2. Format code: `go fmt`
+3. Build: `go build -o chkiso`
+4. Test locally with test ISO and various modes
 5. Update README.md if user-facing behavior changes
-6. Submit PR - automated tests will run
-7. Ensure all tests pass before merging
+6. Update WORKFLOWS.md if workflow behavior changes
+7. Run security checks if adding dependencies
+8. Submit PR - automated tests, builds, and security scans will run
+9. Ensure all checks pass before merging
+
+## Key Files
+
+- `main.go` - All application logic (single file architecture)
+- `go.mod` - Go module definition and dependencies
+- `Makefile` - Build automation for multiple platforms
+- `README.md` - User documentation with usage examples
+- `WORKFLOWS.md` - Detailed workflow documentation for developers
+- `.github/workflows/` - Complete CI/CD pipeline definitions
+
+## Development Workflow
+
+1. **Before starting**: Pull latest from main
+2. **During development**: 
+   - Test locally with `go build && ./chkiso test/test.iso`
+   - Use `go fmt` to format code
+   - Check for common issues: `go vet`
+3. **Before committing**:
+   - Ensure code builds: `go build`
+   - Test all verification modes
+   - Update documentation if needed
+4. **PR submission**: 
+   - CI will run tests, builds, and security scans
+   - Fix any issues identified by automated checks
 
 ## Documentation
 
 - Keep `README.md` updated with user-facing changes
-- Document parameter changes in script help comments
-- Update `CODE_SIGNING.md` if signing process changes
+- Update `WORKFLOWS.md` for workflow changes
+- Document any new flags or options in help text
 - Use clear examples in documentation
+- Maintain cross-platform compatibility in examples
