@@ -1,109 +1,102 @@
 ---
-name: Create Release
+name: Release
 
 on:
+  release:
+    types: [created]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version number (e.g., 1.0.0, 1.1.0, 2.0.0)'
-        required: true
-        type: string
-      prerelease:
-        description: 'Mark as pre-release'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
-  create-release:
+  build-go:
+    name: Build Go Binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
     
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            output: chkiso-windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            output: chkiso-windows-arm64.exe
+          - goos: linux
+            goarch: amd64
+            output: chkiso-linux-amd64
+          - goos: linux
+            goarch: 386
+            output: chkiso-linux-386
+          - goos: linux
+            goarch: arm64
+            output: chkiso-linux-arm64
+          - goos: linux
+            goarch: arm
+            output: chkiso-linux-arm
+          - goos: darwin
+            goarch: amd64
+            output: chkiso-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: chkiso-darwin-arm64
+          - goos: freebsd
+            goarch: amd64
+            output: chkiso-freebsd-amd64
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          fetch-depth: 0
+          go-version: '1.21'
 
-      - name: Validate version format
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          VERSION="${{ inputs.version }}"
-          
-          # Validate semantic versioning format
-          # Format: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-prerelease
-          # Pre-release: alphanumeric identifiers separated by dots, no empty identifiers
-          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$'; then
-            echo "Error: Invalid version format '$VERSION'"
-            echo "Use semantic versioning:"
-            echo "  - Release: 1.0.0, 1.1.0, 2.0.0"
-            echo "  - Pre-release: 1.0.0-beta, 1.0.0-rc.1, 1.0.0-alpha.2"
-            exit 1
-          fi
-          
-          echo "✓ Version format is valid: $VERSION"
+          go build -ldflags="-s -w" -trimpath -o ${{ matrix.output }}
+          sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
+          echo "Built ${{ matrix.output }}"
+          ls -lh ${{ matrix.output }}
 
-      - name: Check if tag exists
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            ${{ matrix.output }}
+            ${{ matrix.output }}.sha256
+
+  release:
+    name: Attach to Release
+    needs: [build-go]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Prepare release files
         run: |
-          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "Error: Tag v${{ inputs.version }} already exists"
-            exit 1
-          fi
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
 
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # Get the latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
-          if [ -z "$LATEST_TAG" ]; then
-            echo "First release - including all commits"
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
-            COMPARE_URL="**First Release**"
-          else
-            echo "Generating changelog since $LATEST_TAG"
-            COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-            COMPARE_URL="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LATEST_TAG}...v${{ inputs.version }}"
-          fi
-          
-          # Create changelog
-          cat > CHANGELOG.md << 'CHANGELOG_EOF'
-          ## Changes in v${{ inputs.version }}
-          
-          ${COMMITS}
-          
-          ---
-          ${COMPARE_URL}
-          CHANGELOG_EOF
-          
-          # Expand variables in changelog
-          eval "cat <<EVAL_EOF
-          $(cat CHANGELOG.md)
-          EVAL_EOF
-          " > CHANGELOG.md
-          
-          # Save for release notes
-          {
-            echo "CHANGELOG<<EOF"
-            cat CHANGELOG.md
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-
-      - name: Create and push tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
-          git push origin "v${{ inputs.version }}"
-
-      - name: Create GitHub Release
+      - name: Attach to Release
         uses: softprops/action-gh-release@v2.0.8
         with:
-          tag_name: v${{ inputs.version }}
-          name: v${{ inputs.version }}
-          body: ${{ steps.changelog.outputs.CHANGELOG }}
-          draft: false
-          prerelease: ${{ inputs.prerelease }}
-          generate_release_notes: true
+          files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
