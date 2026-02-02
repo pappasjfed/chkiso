@@ -1,5 +1,12 @@
 # Copilot Instructions for chkiso
 
+## Quick Reference
+
+**Build**: `go build -o chkiso` or `make build`  
+**Test**: `./chkiso test/test.iso`  
+**Format**: `go fmt`  
+**Security**: See `.github/workflows/security.yml`
+
 ## Repository Overview
 
 This repository contains `chkiso`, a cross-platform Go tool for verifying ISO image integrity using multiple validation methods. The tool checks SHA256 hashes, MD5 implants, and internal file checksums. It compiles to native binaries for Windows, Linux, macOS, and FreeBSD.
