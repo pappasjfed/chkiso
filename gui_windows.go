@@ -77,6 +77,19 @@ func getDriveType(path string) uint32 {
 	return uint32(ret)
 }
 
+// isDriveReady checks if a drive has media inserted and is ready
+func isDriveReady(driveLetter string) bool {
+	// Try to access the drive root
+	drivePath := driveLetter
+	if !strings.HasSuffix(drivePath, ":\\") {
+		drivePath = driveLetter + ":\\"
+	}
+	
+	// Try to read the root directory
+	_, err := os.ReadDir(drivePath)
+	return err == nil
+}
+
 // getCurrentDrive returns the drive letter the executable is running from
 func getCurrentDrive() string {
 	exePath, err := os.Executable()
@@ -130,6 +143,9 @@ func runGUI() {
 		MinSize:  Size{Width: 600, Height: 400},
 		Size:     Size{Width: 700, Height: 500},
 		Layout:   VBox{},
+		OnDropFiles: func(files []string) {
+			handleDroppedFiles(files, resultTextEdit, verifyButton, mainWindow)
+		},
 		Children: []Widget{
 			Composite{
 				Layout: Grid{Columns: 3},
@@ -193,8 +209,9 @@ func runGUI() {
 	// If no drives were found, show a helpful error message in the text area
 	if len(drives) == 1 && drives[0] == "<No CD-ROM drives found>" {
 		resultTextEdit.SetText("No CD-ROM drives detected on this system.\n\n" +
-			"Click 'Browse for ISO file...' to verify an ISO file from your hard drive,\n" +
-			"or:\n\n" +
+			"To verify an ISO file:\n" +
+			"  • Click 'Browse for ISO file...' button below, or\n" +
+			"  • Drag and drop an ISO file onto this window\n\n" +
 			"To verify a CD/DVD drive:\n" +
 			"  1. Insert a bootable CD/DVD into a drive\n" +
 			"  2. Or mount an ISO file using Windows Explorer (right-click → Mount)\n" +
@@ -202,9 +219,35 @@ func runGUI() {
 			"Command-line usage is also available:\n" +
 			"  chkiso.exe path\\to\\image.iso")
 		verifyButton.SetEnabled(false)
+	} else {
+		// Show helpful hint about drag and drop
+		resultTextEdit.SetText("Ready to verify.\n\n" +
+			"Select a drive from the dropdown and click 'Verify',\n" +
+			"or click 'Browse for ISO file...',\n" +
+			"or drag and drop an ISO file onto this window.")
 	}
 	
 	mainWindow.Run()
+}
+
+// handleDroppedFiles processes files dropped onto the window
+func handleDroppedFiles(files []string, resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner walk.Form) {
+	if len(files) == 0 {
+		return
+	}
+	
+	// Only process the first file
+	filePath := files[0]
+	
+	// Check if it's an ISO file
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext != ".iso" {
+		resultText.SetText(fmt.Sprintf("Error: Only ISO files are supported.\n\nYou dropped: %s\n\nPlease drop an ISO file (.iso extension) onto this window.", filepath.Base(filePath)))
+		return
+	}
+	
+	// Verify the dropped ISO file
+	verifyISOFile(filePath, resultText, verifyBtn)
 }
 
 // browseForISO opens a file dialog to select an ISO file for verification
@@ -229,10 +272,16 @@ func browseForISO(resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner w
 		return
 	}
 	
+	// Verify the selected ISO file
+	verifyISOFile(isoPath, resultText, verifyBtn)
+}
+
+// verifyISOFile performs verification on an ISO file
+func verifyISOFile(isoPath string, resultText *walk.TextEdit, verifyBtn *walk.PushButton) {
 	// Disable button during verification
 	verifyBtn.SetEnabled(false)
 	
-	resultText.SetText(fmt.Sprintf("Verifying ISO file: %s\n\nPlease wait, this may take a few minutes...\n\n", isoPath))
+	resultText.SetText(fmt.Sprintf("Verifying ISO file: %s\n\nPlease wait, this may take a few minutes...\n\n", filepath.Base(isoPath)))
 	
 	// Run verification in a goroutine
 	go func() {
@@ -322,7 +371,18 @@ func verifyDrive(driveCombo *walk.ComboBox, resultText *walk.TextEdit, verifyBtn
 	// Check if this is the placeholder message for no drives
 	if selectedDrive == "<No CD-ROM drives found>" {
 		resultText.SetText("Error: No CD-ROM drives available to verify.\n\n" +
-			"Please insert a CD/DVD or mount an ISO, then relaunch the application.")
+			"Click 'Browse for ISO file...' to verify an ISO file from your hard drive.")
+		return
+	}
+	
+	// Check if the drive is empty (no media inserted)
+	if !isDriveReady(selectedDrive) {
+		resultText.SetText(fmt.Sprintf("Drive %s is detected but empty.\n\n", selectedDrive) +
+			"Please insert a bootable CD/DVD into the drive and try again.\n\n" +
+			"Alternatively:\n" +
+			"  • Click 'Browse for ISO file...' to verify an ISO file from your hard drive\n" +
+			"  • Mount an ISO file using Windows Explorer (right-click → Mount)\n" +
+			"  • Then relaunch this application to verify the mounted drive")
 		return
 	}
 	
