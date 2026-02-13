@@ -136,7 +136,7 @@ func getCurrentDrive() string {
 func runGUI() {
 	logDebug("runGUI() called")
 	
-	var mainWindow *walk.MainWindow
+	var dlg *walk.Dialog
 	var driveComboBox *walk.ComboBox
 	var resultTextEdit *walk.TextEdit
 	var verifyButton *walk.PushButton
@@ -198,7 +198,7 @@ func runGUI() {
 			if md5CheckBox != nil {
 				md5Check = md5CheckBox.Checked()
 			}
-			verifyDriveWithOptions(driveComboBox, resultTextEdit, verifyButton, mainWindow, md5Check)
+			verifyDriveWithOptions(driveComboBox, resultTextEdit, verifyButton, dlg, md5Check)
 		},
 	})
 	
@@ -211,7 +211,7 @@ func runGUI() {
 			if md5CheckBox != nil {
 				md5Check = md5CheckBox.Checked()
 			}
-			browseForISOWithOptions(resultTextEdit, verifyButton, mainWindow, md5Check)
+			browseForISOWithOptions(resultTextEdit, verifyButton, dlg, md5Check)
 		},
 	})
 	
@@ -238,27 +238,26 @@ func runGUI() {
 		Text:        "Close",
 		ToolTipText: "", // Explicitly disable tooltip
 		OnClicked: func() {
-			mainWindow.Close()
+			dlg.Accept()
 		},
 	})
 	
 	logDebug("Building GUI window with %d children widgets", len(children))
-	logDebug("Creating MainWindow...")
+	logDebug("Creating Dialog instead of MainWindow to avoid FormBase tooltip issues...")
 	
-	// Create MainWindow without OnDropFiles to reduce widget complexity
-	// OnDropFiles requires additional internal structures that may trigger TTM_ADDTOOL
-	err := MainWindow{
-		AssignTo: &mainWindow,
+	// Use Dialog instead of MainWindow to avoid FormBase composite creation
+	// Dialog has simpler internal structure and should not trigger TTM_ADDTOOL
+	err := Dialog{
+		AssignTo: &dlg,
 		Title:    fmt.Sprintf("chkiso - ISO/Drive Verification Tool v%s", VERSION),
 		MinSize:  Size{Width: 600, Height: 400},
 		Size:     Size{Width: 700, Height: 500},
 		Layout:   VBox{},
-		// OnDropFiles removed temporarily to reduce widget complexity
 		Children: children,
-	}.Create()
+	}.Create(nil)
 	
 	if err != nil {
-		logDebug("ERROR: Failed to create window: %v", err)
+		logDebug("ERROR: Failed to create dialog: %v", err)
 		
 		// Get the log file path to show user
 		logPath := ""
@@ -281,15 +280,14 @@ func runGUI() {
 		return
 	}
 	
-	logDebug("MainWindow created successfully")
+	logDebug("Dialog created successfully")
 	
 	// If no drives were found, show a helpful error message in the text area
 	if len(drives) == 1 && drives[0] == "<No CD-ROM drives found>" {
 		logDebug("Setting initial message for no drives found")
 		resultTextEdit.SetText("No CD-ROM drives detected on this system.\n\n" +
 			"To verify an ISO file:\n" +
-			"  • Click 'Browse for ISO file...' button below, or\n" +
-			"  • Drag and drop an ISO file onto this window\n\n" +
+			"  • Click 'Browse for ISO file...' button below\n\n" +
 			"To verify a CD/DVD drive:\n" +
 			"  1. Insert a bootable CD/DVD into a drive\n" +
 			"  2. Or mount an ISO file using Windows Explorer (right-click → Mount)\n" +
@@ -299,15 +297,14 @@ func runGUI() {
 		verifyButton.SetEnabled(false)
 	} else {
 		logDebug("Setting initial ready message")
-		// Show helpful hint about drag and drop
+		// Show helpful hint
 		resultTextEdit.SetText("Ready to verify.\n\n" +
 			"Select a drive from the dropdown and click 'Verify',\n" +
-			"or click 'Browse for ISO file...',\n" +
-			"or drag and drop an ISO file onto this window.")
+			"or click 'Browse for ISO file...'.")
 	}
 	
-	logDebug("Starting GUI event loop (mainWindow.Run)")
-	mainWindow.Run()
+	logDebug("Starting GUI event loop (dlg.Run)")
+	dlg.Run()
 	logDebug("GUI event loop ended")
 }
 
