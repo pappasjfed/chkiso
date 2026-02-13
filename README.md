@@ -28,21 +28,22 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
    - A dropdown list of all CD-ROM/DVD drives on your system
    - A "Browse for ISO file..." button to verify ISO files from your hard drive
    - A "Verify" button to start the verification
-   - A results area showing the verification progress and results
+   - A results area showing the verification progress and results (also accepts drag-and-drop)
    - A "Close" button to exit the application
 3. **To verify a CD/DVD drive:**
    - Select the drive you want to verify from the dropdown
    - If you run chkiso from a CD/DVD drive, that drive will be pre-selected
    - Click "Verify" to start the verification process
-4. **To verify an ISO file:**
-   - Click "Browse for ISO file..." button
-   - Select the ISO file from your computer
-   - The verification will start automatically
+   - **Note**: If a drive is empty, you'll get a helpful message
+4. **To verify an ISO file (3 ways):**
+   - **Option 1**: Click "Browse for ISO file..." and select the ISO
+   - **Option 2**: Drag and drop an ISO file onto the window
+   - **Option 3**: Use command-line mode (see below)
 5. Wait for the verification to complete (this may take several minutes)
 6. Review the results in the text area
 7. Click "Close" when finished
 
-**Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message and the "Browse for ISO file..." button will allow you to verify ISO files directly.
+**Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message. You can use the browse button or drag-and-drop to verify ISO files.
 
 ### GUI vs Command Line
 

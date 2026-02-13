@@ -55,7 +55,17 @@ This document provides instructions for testing the new GUI mode on Windows.
      - Summary of verification (Success or Failure)
    - The "Verify" button should be re-enabled when complete
 
-#### Test 4: Browse for ISO File
+#### Test 4: Verify Empty Drive
+1. Launch the GUI with a CD-ROM drive that has no disc
+2. Select the empty drive from the dropdown
+3. Click "Verify"
+4. **Expected Result**:
+   - Text area displays message: "Drive X: is detected but empty"
+   - Provides instructions to insert disc or use browse/drag-drop
+   - Verify button is re-enabled
+   - No crash or error dialog
+
+#### Test 5: Browse for ISO File
 1. Launch the GUI
 2. Click "Browse for ISO file..." button
 3. **Expected Result**: 
@@ -74,29 +84,38 @@ This document provides instructions for testing the new GUI mode on Windows.
 6. Cancel the file dialog
 7. **Expected Result**: Nothing happens, window stays open
 
-#### Test 5: Close the GUI
+#### Test 6: Drag and Drop ISO File
+1. Launch the GUI
+2. Open File Explorer and navigate to an ISO file
+3. Drag the ISO file and drop it onto the GUI window
+4. **Expected Result**:
+   - The text area should show "Verifying ISO file: [filename]..."
+   - Verification should start automatically
+   - Same results as browse method (SHA256, MD5, summary)
+5. Try dragging a non-ISO file (e.g., .txt, .exe)
+6. **Expected Result**:
+   - Error message: "Only ISO files are supported"
+   - Shows which file was dropped
+   - No verification starts
+
+#### Test 7: Close the GUI
 1. After verification completes (or at any time)
 2. Click the "Close" button
 3. **Expected Result**: The window should close immediately
 
-#### Test 5: Close the GUI
-1. After verification completes (or at any time)
-2. Click the "Close" button
-3. **Expected Result**: The window should close immediately
-
-#### Test 6: Launch from Command Prompt
+#### Test 8: Launch from Command Prompt
 1. Open Command Prompt (cmd.exe)
 2. Navigate to the directory with the executable
 3. Run: `chkiso-windows-amd64.exe` (with no arguments)
 4. **Expected Result**: The program should display usage/help text in the console (NOT launch GUI)
 
-#### Test 7: Launch from PowerShell
+#### Test 9: Launch from PowerShell
 1. Open PowerShell
 2. Navigate to the directory with the executable
 3. Run: `.\chkiso-windows-amd64.exe` (with no arguments)
 4. **Expected Result**: The program should display usage/help text in the console (NOT launch GUI)
 
-#### Test 8: CLI Mode with Arguments
+#### Test 10: CLI Mode with Arguments
 1. Open Command Prompt or PowerShell
 2. Run: `chkiso-windows-amd64.exe --version`
 3. **Expected Result**: Should display version information in the console
@@ -114,6 +133,15 @@ The program uses the following logic to determine mode:
 - Only CD-ROM/DVD drives (drive type 5) are listed in the dropdown
 - Hard drives, SSDs, and USB drives are excluded from the GUI
 - This is intentional for safety and to focus on the primary use case
+- Empty drives (no disc inserted) are detected and handled with helpful messages
+
+### Multiple Verification Methods
+The GUI supports three ways to verify ISO files:
+1. **Drive dropdown**: Select a CD-ROM/DVD drive and click "Verify"
+2. **Browse button**: Click "Browse for ISO file..." to select an ISO via file dialog
+3. **Drag and drop**: Drag an ISO file from File Explorer and drop it onto the window
+
+All methods provide the same comprehensive verification (SHA256 + MD5 + file contents when applicable)
 
 ## Troubleshooting
 
