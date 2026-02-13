@@ -26,13 +26,14 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 1. **Launch the GUI:**
    - **Double-click** the `chkiso-windows-amd64.exe` file (automatically launches GUI)
    - **OR** run from command line: `chkiso.exe -gui` (explicitly launch GUI mode)
-2. A window will appear showing:
+2. A window will appear with controls arranged vertically:
+   - A "Select Drive:" label
    - A dropdown list of all CD-ROM/DVD drives on your system
+   - A "Verify" button to start drive verification
    - A "Browse for ISO file..." button to verify ISO files from your hard drive
    - **MD5 checkbox** (if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
-   - A "Verify" button to start the verification
-   - A results area showing the verification progress and results (also accepts drag-and-drop)
-   - A "Close" button to exit the application
+   - A large results area showing the verification progress and results (also accepts drag-and-drop)
+   - A "Close" button at the bottom to exit the application
 3. **To verify a CD/DVD drive:**
    - Select the drive you want to verify from the dropdown
    - If you run chkiso from a CD/DVD drive, that drive will be pre-selected
@@ -41,7 +42,7 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
    - **Note**: If a drive is empty, you'll get a helpful message
 4. **To verify an ISO file (3 ways):**
    - **Option 1**: Click "Browse for ISO file..." and select the ISO
-   - **Option 2**: Drag and drop an ISO file onto the window
+   - **Option 2**: Drag and drop an ISO file onto the results area
    - **Option 3**: Use command-line mode (see below)
    - The MD5 checkbox (if available) applies to ISO verification too
 5. Wait for the verification to complete (this may take several minutes)
@@ -81,7 +82,7 @@ If you encounter errors when launching the GUI:
    - Check this file for detailed error information
 
 2. **Common Issues**:
-   - **TTM_ADDTOOL errors**: Usually related to Windows tooltip controls
+   - **TTM_ADDTOOL errors**: ~~Usually related to Windows tooltip controls~~ **FIXED in v2.0.0** - Widget structure simplified to avoid tooltip limits
    - **Window creation failures**: May be due to system resource constraints
    - The error dialog will show the log file location
 

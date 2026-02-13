@@ -14,15 +14,16 @@ This document provides instructions for testing the new GUI mode on Windows.
 #### Test 1: Launch GUI from File Explorer
 1. Navigate to the directory containing `chkiso-windows-amd64.exe` in File Explorer
 2. **Double-click** the executable
-3. **Expected Result**: A GUI window should appear with:
+3. **Expected Result**: A GUI window should appear with vertical layout:
    - Title: "chkiso - ISO/Drive Verification Tool v2.0.0"
-   - A "Select Drive:" label
+   - A "Select Drive:" label at the top
    - A dropdown menu listing all CD-ROM/DVD drives (or "<No CD-ROM drives found>" if none present)
+   - A "Verify" button below the dropdown
    - A "Browse for ISO file..." button
    - **MD5 checkbox** (only if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
-   - A "Verify" button
-   - A text area for results
+   - A large text area for results (takes most of the window)
    - A "Close" button at the bottom
+   - Note: Controls are arranged vertically to avoid Windows tooltip limits
 
 #### Test 1b: Launch GUI from Command Line with -gui Flag
 1. Open Command Prompt or PowerShell
@@ -225,14 +226,14 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 - Check Windows Event Viewer for any error messages
 - Try launching with `-gui` flag from command line to see error messages
 
-### GUI creation errors (e.g., TTM_ADDTOOL failed)
-- **Check the debug log**: The error dialog will show the log file path
-- Common causes:
-  - Windows Common Controls not properly initialized
-  - System resource constraints
-  - Tooltip control limits exceeded
-- **Workaround**: Try running as administrator
-- **Report**: Include the debug log file when reporting this issue
+### GUI creation errors (e.g., TTM_ADDTOOL failed) - FIXED
+- **Status**: **FIXED in v2.0.0** - Widget structure simplified to avoid Windows tooltip limits
+- **Previous issue**: Nested composite widgets exceeded tooltip control limits
+- **Solution**: Flattened widget hierarchy to prevent TTM_ADDTOOL errors
+- If you still encounter this error:
+  - **Check the debug log**: The error dialog will show the log file path
+  - Try running as administrator
+  - Report with debug log file
 
 ### GUI freezes during verification
 - This should not happen as verification runs asynchronously
