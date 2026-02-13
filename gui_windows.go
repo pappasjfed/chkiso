@@ -172,12 +172,13 @@ func runGUI() {
 	logDebug("checkisomd5.exe available: %v", md5Available)
 	
 	// Build the children widgets dynamically
-	// Note: Keep widget structure flat to avoid TTM_ADDTOOL errors
+	// Note: Keep widget structure flat and disable tooltips to avoid TTM_ADDTOOL errors
 	var children []Widget
 	
 	// Add drive selection controls directly without nested composite
 	children = append(children, Label{
-		Text: "Select Drive:",
+		Text:        "Select Drive:",
+		ToolTipText: "", // Explicitly disable tooltip
 	})
 	
 	children = append(children, ComboBox{
@@ -185,11 +186,13 @@ func runGUI() {
 		Model:        drives,
 		CurrentIndex: defaultIndex,
 		MinSize:      Size{Width: 100},
+		ToolTipText:  "", // Explicitly disable tooltip
 	})
 	
 	children = append(children, PushButton{
-		AssignTo: &verifyButton,
-		Text:     "Verify",
+		AssignTo:    &verifyButton,
+		Text:        "Verify",
+		ToolTipText: "", // Explicitly disable tooltip
 		OnClicked: func() {
 			md5Check := false
 			if md5CheckBox != nil {
@@ -201,7 +204,8 @@ func runGUI() {
 	
 	// Add browse button
 	children = append(children, PushButton{
-		Text: "Browse for ISO file...",
+		Text:        "Browse for ISO file...",
+		ToolTipText: "", // Explicitly disable tooltip
 		OnClicked: func() {
 			md5Check := false
 			if md5CheckBox != nil {
@@ -214,22 +218,25 @@ func runGUI() {
 	// Add MD5 checkbox if checkisomd5.exe is available
 	if md5Available {
 		children = append(children, CheckBox{
-			AssignTo: &md5CheckBox,
-			Text:     "Verify implanted MD5 (checkisomd5)",
+			AssignTo:    &md5CheckBox,
+			Text:        "Verify implanted MD5 (checkisomd5)",
+			ToolTipText: "", // Explicitly disable tooltip
 		})
 	}
 	
 	// Add text area
 	children = append(children, TextEdit{
-		AssignTo: &resultTextEdit,
-		ReadOnly: true,
-		VScroll:  true,
-		Font:     Font{Family: "Courier New", PointSize: 9},
+		AssignTo:    &resultTextEdit,
+		ReadOnly:    true,
+		VScroll:     true,
+		Font:        Font{Family: "Courier New", PointSize: 9},
+		ToolTipText: "", // Explicitly disable tooltip
 	})
 	
 	// Add close button
 	children = append(children, PushButton{
-		Text: "Close",
+		Text:        "Close",
+		ToolTipText: "", // Explicitly disable tooltip
 		OnClicked: func() {
 			mainWindow.Close()
 		},
