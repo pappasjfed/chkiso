@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build windows && !arm64
+// +build windows,!arm64
 
 package main
 
@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -16,6 +18,17 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 )
+
+var (
+	kernel32         = syscall.NewLazyDLL("kernel32.dll")
+	procGetConsoleCP = kernel32.NewProc("GetConsoleCP")
+)
+
+// hasConsole checks if the process is attached to a console window
+func hasConsole() bool {
+	r1, _, _ := procGetConsoleCP.Call()
+	return r1 != 0
+}
 
 // runGUI starts the GUI mode using Fyne
 func runGUI() {
