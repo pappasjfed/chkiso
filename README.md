@@ -71,6 +71,25 @@ This means you can use the same executable for both GUI and command-line operati
 chkiso.exe -gui
 ```
 
+### Troubleshooting GUI Mode
+
+If you encounter errors when launching the GUI:
+
+1. **Debug Logging**: GUI mode automatically creates a debug log file in your temp directory
+   - Location: `%TEMP%\chkiso-debug-YYYYMMDD-HHMMSS.log`
+   - The log path is shown when you launch the program
+   - Check this file for detailed error information
+
+2. **Common Issues**:
+   - **TTM_ADDTOOL errors**: Usually related to Windows tooltip controls
+   - **Window creation failures**: May be due to system resource constraints
+   - The error dialog will show the log file location
+
+3. **What to do**:
+   - Check the debug log file for details
+   - Include the log file when reporting issues
+   - Try running as administrator if permissions are an issue
+
 ## Installation
 
 ### Download Pre-built Binary (Recommended)

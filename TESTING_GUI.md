@@ -153,7 +153,28 @@ This document provides instructions for testing the new GUI mode on Windows.
 4. Run: `chkiso-windows-amd64.exe E:` (use actual drive letter)
 5. **Expected Result**: Should perform verification in CLI mode, showing output in the console
 
+#### Test 11: Debug Logging
+1. Open Command Prompt or PowerShell
+2. Run: `chkiso-windows-amd64.exe -gui`
+3. **Expected Result**:
+   - Console shows: "Debug log: C:\Users\...\AppData\Local\Temp\chkiso-debug-*.log"
+   - GUI window appears (or error dialog with log path)
+4. Navigate to the temp directory shown
+5. Open the log file
+6. **Expected Result**:
+   - Log contains version, platform info
+   - Log shows drive detection results
+   - Log shows window creation steps
+   - Timestamps for each entry
+7. If GUI fails to create, error dialog shows log path
+
 ## Known Behavior
+
+### Debug Logging (NEW)
+- GUI mode automatically creates debug logs in temp directory
+- Log path shown on stderr/console when launching
+- Logs persist after program exits
+- Useful for troubleshooting GUI issues
 
 ### GUI vs CLI Detection
 The program uses the following logic to determine mode:
@@ -176,6 +197,17 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 
 ## Troubleshooting
 
+### Debug Logging (NEW)
+- **GUI mode automatically creates debug logs** in your temp directory
+- Log location: `%TEMP%\chkiso-debug-YYYYMMDD-HHMMSS.log`
+- The path is displayed when launching GUI mode (check console if running from CLI)
+- Logs include:
+  - Version and platform information
+  - Drive detection results
+  - Window creation steps
+  - Any errors that occur
+- **Include this log file when reporting issues**
+
 ### No drives appear in dropdown
 - **This is now handled gracefully**: The GUI will display "<No CD-ROM drives found>"
 - The window will stay open with helpful instructions
@@ -191,6 +223,16 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 - Check that you're running on Windows
 - Ensure you're double-clicking from File Explorer (not running from a console)
 - Check Windows Event Viewer for any error messages
+- Try launching with `-gui` flag from command line to see error messages
+
+### GUI creation errors (e.g., TTM_ADDTOOL failed)
+- **Check the debug log**: The error dialog will show the log file path
+- Common causes:
+  - Windows Common Controls not properly initialized
+  - System resource constraints
+  - Tooltip control limits exceeded
+- **Workaround**: Try running as administrator
+- **Report**: Include the debug log file when reporting this issue
 
 ### GUI freezes during verification
 - This should not happen as verification runs asynchronously
@@ -207,5 +249,6 @@ If you encounter any issues:
 1. Note the Windows version (Windows 10/11)
 2. Note the drive type and size
 3. Capture any error messages
+4. **Include the debug log file** from `%TEMP%\chkiso-debug-*.log`
 4. If possible, provide screenshots
 5. Report on the GitHub issues page
