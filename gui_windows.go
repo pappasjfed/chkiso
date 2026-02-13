@@ -134,16 +134,21 @@ func getCurrentDrive() string {
 
 // runGUI starts the GUI mode
 func runGUI() {
+	logDebug("runGUI() called")
+	
 	var mainWindow *walk.MainWindow
 	var driveComboBox *walk.ComboBox
 	var resultTextEdit *walk.TextEdit
 	var verifyButton *walk.PushButton
 	var md5CheckBox *walk.CheckBox
 	
+	logDebug("Getting drive letters...")
 	drives := getDriveLetters()
+	logDebug("Found %d CD-ROM drives: %v", len(drives), drives)
 	
 	// Get current drive if running from a drive
 	currentDrive := getCurrentDrive()
+	logDebug("Current drive: %s", currentDrive)
 	defaultIndex := 0
 	if currentDrive != "" && len(drives) > 0 {
 		for i, drive := range drives {
@@ -158,10 +163,13 @@ func runGUI() {
 	if len(drives) == 0 {
 		drives = []string{"<No CD-ROM drives found>"}
 		defaultIndex = 0
+		logDebug("No CD-ROM drives found, using placeholder")
 	}
 	
 	// Check if checkisomd5.exe is available
+	logDebug("Checking for checkisomd5.exe...")
 	md5Available := isCheckisomd5Available()
+	logDebug("checkisomd5.exe available: %v", md5Available)
 	
 	// Build the children widgets dynamically
 	var children []Widget
@@ -243,6 +251,9 @@ func runGUI() {
 		},
 	})
 	
+	logDebug("Building GUI window with %d children widgets", len(children))
+	logDebug("Creating MainWindow...")
+	
 	err := MainWindow{
 		AssignTo: &mainWindow,
 		Title:    fmt.Sprintf("chkiso - ISO/Drive Verification Tool v%s", VERSION),
@@ -260,12 +271,34 @@ func runGUI() {
 	}.Create()
 	
 	if err != nil {
-		walk.MsgBox(nil, "Error", fmt.Sprintf("Failed to create window: %v", err), walk.MsgBoxIconError)
+		logDebug("ERROR: Failed to create window: %v", err)
+		
+		// Get the log file path to show user
+		logPath := ""
+		if logFile != nil {
+			logPath = logFile.Name()
+		}
+		
+		errorMsg := fmt.Sprintf("Failed to create window: %v\n\n", err)
+		errorMsg += "This error can occur due to:\n"
+		errorMsg += "• Windows Common Controls issues\n"
+		errorMsg += "• Too many GUI elements\n"
+		errorMsg += "• System resource constraints\n\n"
+		
+		if logPath != "" {
+			errorMsg += fmt.Sprintf("Debug log saved to:\n%s\n\n", logPath)
+			errorMsg += "Please check the log file for more details."
+		}
+		
+		walk.MsgBox(nil, "Error Creating GUI", errorMsg, walk.MsgBoxIconError)
 		return
 	}
 	
+	logDebug("MainWindow created successfully")
+	
 	// If no drives were found, show a helpful error message in the text area
 	if len(drives) == 1 && drives[0] == "<No CD-ROM drives found>" {
+		logDebug("Setting initial message for no drives found")
 		resultTextEdit.SetText("No CD-ROM drives detected on this system.\n\n" +
 			"To verify an ISO file:\n" +
 			"  • Click 'Browse for ISO file...' button below, or\n" +
@@ -278,6 +311,7 @@ func runGUI() {
 			"  chkiso.exe path\\to\\image.iso")
 		verifyButton.SetEnabled(false)
 	} else {
+		logDebug("Setting initial ready message")
 		// Show helpful hint about drag and drop
 		resultTextEdit.SetText("Ready to verify.\n\n" +
 			"Select a drive from the dropdown and click 'Verify',\n" +
@@ -285,7 +319,9 @@ func runGUI() {
 			"or drag and drop an ISO file onto this window.")
 	}
 	
+	logDebug("Starting GUI event loop (mainWindow.Run)")
 	mainWindow.Run()
+	logDebug("GUI event loop ended")
 }
 
 // handleDroppedFiles processes files dropped onto the window

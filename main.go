@@ -7,12 +7,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const (
@@ -27,7 +29,46 @@ const (
 
 var (
 	hasErrors = false
+	debugLog  *log.Logger
+	logFile   *os.File
 )
+
+// initLogger initializes the debug logger to a file in temp directory
+func initLogger() {
+	// Create log file in temp directory
+	tempDir := os.TempDir()
+	logPath := filepath.Join(tempDir, fmt.Sprintf("chkiso-debug-%s.log", time.Now().Format("20060102-150405")))
+	
+	var err error
+	logFile, err = os.Create(logPath)
+	if err != nil {
+		// If we can't create log file, just continue without logging
+		return
+	}
+	
+	debugLog = log.New(logFile, "", log.LstdFlags|log.Lshortfile)
+	debugLog.Printf("chkiso version %s starting", VERSION)
+	debugLog.Printf("Platform: %s/%s", runtime.GOOS, runtime.GOARCH)
+	debugLog.Printf("Log file: %s", logPath)
+	
+	// Also print to stderr so user knows where log is
+	fmt.Fprintf(os.Stderr, "Debug log: %s\n", logPath)
+}
+
+// logDebug logs a debug message if logger is initialized
+func logDebug(format string, args ...interface{}) {
+	if debugLog != nil {
+		debugLog.Printf(format, args...)
+	}
+}
+
+// closeLogger closes the log file
+func closeLogger() {
+	if logFile != nil {
+		logDebug("Closing log file")
+		logFile.Close()
+	}
+}
 
 type Config struct {
 	Path               string
@@ -49,6 +90,13 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "-gui" || arg == "--gui" {
 			if runtime.GOOS == "windows" {
+				// Initialize logging for GUI mode
+				initLogger()
+				defer closeLogger()
+				
+				logDebug("GUI mode requested via -gui flag")
+				logDebug("Command line args: %v", os.Args)
+				
 				runGUI()
 				return
 			} else {
@@ -64,6 +112,12 @@ func main() {
 	// 2. No command-line arguments provided (or only the executable name)
 	// 3. No console is attached (double-clicked from Explorer)
 	if runtime.GOOS == "windows" && len(os.Args) == 1 && !hasConsole() {
+		// Initialize logging for GUI mode
+		initLogger()
+		defer closeLogger()
+		
+		logDebug("GUI mode auto-detected (no console, no args)")
+		
 		runGUI()
 		return
 	}
