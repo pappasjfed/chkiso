@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -90,6 +91,27 @@ func isDriveReady(driveLetter string) bool {
 	return err == nil
 }
 
+// isCheckisomd5Available checks if checkisomd5.exe is available in PATH or current directory
+func isCheckisomd5Available() bool {
+	// Check in PATH
+	_, err := exec.LookPath("checkisomd5.exe")
+	if err == nil {
+		return true
+	}
+	
+	// Check in same directory as executable
+	exePath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	
+	exeDir := filepath.Dir(exePath)
+	checkisomd5Path := filepath.Join(exeDir, "checkisomd5.exe")
+	
+	_, err = os.Stat(checkisomd5Path)
+	return err == nil
+}
+
 // getCurrentDrive returns the drive letter the executable is running from
 func getCurrentDrive() string {
 	exePath, err := os.Executable()
@@ -116,6 +138,7 @@ func runGUI() {
 	var driveComboBox *walk.ComboBox
 	var resultTextEdit *walk.TextEdit
 	var verifyButton *walk.PushButton
+	var md5CheckBox *walk.CheckBox
 	
 	drives := getDriveLetters()
 	
@@ -137,6 +160,89 @@ func runGUI() {
 		defaultIndex = 0
 	}
 	
+	// Check if checkisomd5.exe is available
+	md5Available := isCheckisomd5Available()
+	
+	// Build the children widgets dynamically
+	var children []Widget
+	
+	// Add drive selection row
+	children = append(children, Composite{
+		Layout: Grid{Columns: 3},
+		Children: []Widget{
+			Label{
+				Text: "Select Drive:",
+			},
+			ComboBox{
+				AssignTo:      &driveComboBox,
+				Model:         drives,
+				CurrentIndex:  defaultIndex,
+				MinSize:       Size{Width: 100},
+			},
+			PushButton{
+				AssignTo: &verifyButton,
+				Text:     "Verify",
+				OnClicked: func() {
+					md5Check := false
+					if md5CheckBox != nil {
+						md5Check = md5CheckBox.Checked()
+					}
+					verifyDriveWithOptions(driveComboBox, resultTextEdit, verifyButton, mainWindow, md5Check)
+				},
+			},
+		},
+	})
+	
+	// Add browse button and MD5 checkbox row
+	var browseRowChildren []Widget
+	browseRowChildren = append(browseRowChildren, PushButton{
+		Text: "Browse for ISO file...",
+		OnClicked: func() {
+			md5Check := false
+			if md5CheckBox != nil {
+				md5Check = md5CheckBox.Checked()
+			}
+			browseForISOWithOptions(resultTextEdit, verifyButton, mainWindow, md5Check)
+		},
+	})
+	
+	// Add MD5 checkbox if checkisomd5.exe is available
+	if md5Available {
+		browseRowChildren = append(browseRowChildren, CheckBox{
+			AssignTo: &md5CheckBox,
+			Text:     "Verify implanted MD5 (checkisomd5)",
+		})
+	}
+	
+	browseRowChildren = append(browseRowChildren, HSpacer{})
+	
+	children = append(children, Composite{
+		Layout: HBox{},
+		Children: browseRowChildren,
+	})
+	
+	// Add text area
+	children = append(children, TextEdit{
+		AssignTo: &resultTextEdit,
+		ReadOnly: true,
+		VScroll:  true,
+		Font:     Font{Family: "Courier New", PointSize: 9},
+	})
+	
+	// Add close button
+	children = append(children, Composite{
+		Layout: HBox{},
+		Children: []Widget{
+			HSpacer{},
+			PushButton{
+				Text: "Close",
+				OnClicked: func() {
+					mainWindow.Close()
+				},
+			},
+		},
+	})
+	
 	err := MainWindow{
 		AssignTo: &mainWindow,
 		Title:    fmt.Sprintf("chkiso - ISO/Drive Verification Tool v%s", VERSION),
@@ -144,61 +250,13 @@ func runGUI() {
 		Size:     Size{Width: 700, Height: 500},
 		Layout:   VBox{},
 		OnDropFiles: func(files []string) {
-			handleDroppedFiles(files, resultTextEdit, verifyButton, mainWindow)
+			md5Check := false
+			if md5CheckBox != nil {
+				md5Check = md5CheckBox.Checked()
+			}
+			handleDroppedFilesWithOptions(files, resultTextEdit, verifyButton, mainWindow, md5Check)
 		},
-		Children: []Widget{
-			Composite{
-				Layout: Grid{Columns: 3},
-				Children: []Widget{
-					Label{
-						Text: "Select Drive:",
-					},
-					ComboBox{
-						AssignTo:      &driveComboBox,
-						Model:         drives,
-						CurrentIndex:  defaultIndex,
-						MinSize:       Size{Width: 100},
-					},
-					PushButton{
-						AssignTo: &verifyButton,
-						Text:     "Verify",
-						OnClicked: func() {
-							verifyDrive(driveComboBox, resultTextEdit, verifyButton, mainWindow)
-						},
-					},
-				},
-			},
-			Composite{
-				Layout: HBox{},
-				Children: []Widget{
-					PushButton{
-						Text: "Browse for ISO file...",
-						OnClicked: func() {
-							browseForISO(resultTextEdit, verifyButton, mainWindow)
-						},
-					},
-					HSpacer{},
-				},
-			},
-			TextEdit{
-				AssignTo: &resultTextEdit,
-				ReadOnly: true,
-				VScroll:  true,
-				Font:     Font{Family: "Courier New", PointSize: 9},
-			},
-			Composite{
-				Layout: HBox{},
-				Children: []Widget{
-					HSpacer{},
-					PushButton{
-						Text: "Close",
-						OnClicked: func() {
-							mainWindow.Close()
-						},
-					},
-				},
-			},
-		},
+		Children: children,
 	}.Create()
 	
 	if err != nil {
@@ -563,4 +621,283 @@ func processChecksumFile(checksumFile, baseDir string, output *strings.Builder) 
 	}
 	
 	return totalFiles, failedFiles
+}
+
+// Wrapper functions that add md5Check parameter
+
+// verifyDriveWithOptions is a wrapper that adds MD5 check option
+func verifyDriveWithOptions(driveCombo *walk.ComboBox, resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner walk.Form, md5Check bool) {
+	// Get selected drive
+	selectedIndex := driveCombo.CurrentIndex()
+	if selectedIndex < 0 {
+		resultText.SetText("Error: No drive selected")
+		return
+	}
+	
+	model := driveCombo.Model()
+	drives, ok := model.([]string)
+	if !ok || selectedIndex >= len(drives) {
+		resultText.SetText("Error: Invalid drive selection")
+		return
+	}
+	
+	selectedDrive := drives[selectedIndex]
+	
+	// Check if this is the placeholder message for no drives
+	if selectedDrive == "<No CD-ROM drives found>" {
+		resultText.SetText("Error: No CD-ROM drives available to verify.\n\n" +
+			"Click 'Browse for ISO file...' to verify an ISO file from your hard drive.")
+		return
+	}
+	
+	// Check if the drive is empty (no media inserted)
+	if !isDriveReady(selectedDrive) {
+		resultText.SetText(fmt.Sprintf("Drive %s is detected but empty.\n\n", selectedDrive) +
+			"Please insert a bootable CD/DVD into the drive and try again.\n\n" +
+			"Alternatively:\n" +
+			"  • Click 'Browse for ISO file...' to verify an ISO file from your hard drive\n" +
+			"  • Mount an ISO file using Windows Explorer (right-click → Mount)\n" +
+			"  • Then relaunch this application to verify the mounted drive")
+		return
+	}
+	
+	// Disable button during verification
+	verifyBtn.SetEnabled(false)
+	
+	resultText.SetText(fmt.Sprintf("Verifying drive %s...\n\nPlease wait, this may take a few minutes...\n\n", selectedDrive))
+	
+	// Run verification in a goroutine to prevent UI freezing
+	go func() {
+		defer func() {
+			// Re-enable button when done
+			verifyBtn.Synchronize(func() {
+				verifyBtn.SetEnabled(true)
+			})
+		}()
+		
+		// Create a config for the verification
+		config := &Config{
+			Path:     selectedDrive,
+			NoVerify: false,
+			MD5Check: md5Check,
+		}
+		
+		// Validate path
+		if err := validatePath(config); err != nil {
+			resultText.Synchronize(func() {
+				resultText.AppendText(fmt.Sprintf("Error: %v\n", err))
+			})
+			return
+		}
+		
+		output := &strings.Builder{}
+		output.WriteString(fmt.Sprintf("=== Verifying Drive %s ===\n\n", selectedDrive))
+		
+		// Display SHA256 Hash
+		output.WriteString("--- SHA256 Hash (Informational) ---\n")
+		calculatedHash, err := getSha256FromPath(config)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Error calculating hash: %v\n", err))
+		} else {
+			output.WriteString(fmt.Sprintf("SHA256: %s\n", strings.ToLower(calculatedHash)))
+		}
+		output.WriteString("\n")
+		
+		// Check implanted MD5 if requested
+		if md5Check {
+			output.WriteString("--- Verifying Implanted MD5 ---\n")
+			md5Result, err := checkImplantedMD5(config)
+			if err != nil {
+				output.WriteString(fmt.Sprintf("Error: %v\n", err))
+			} else if md5Result == nil {
+				output.WriteString("No implanted MD5 signature found.\n")
+			} else {
+				output.WriteString(fmt.Sprintf("Verification Method: %s\n", md5Result.VerificationMethod))
+				output.WriteString(fmt.Sprintf("Stored MD5:          %s\n", md5Result.StoredMD5))
+				output.WriteString(fmt.Sprintf("Calculated MD5:      %s\n", md5Result.CalculatedMD5))
+				if md5Result.IsIntegrityOK {
+					output.WriteString("Result: SUCCESS - Implanted MD5 is valid.\n")
+				} else {
+					output.WriteString("Result: FAILURE - Implanted MD5 does not match.\n")
+				}
+			}
+			output.WriteString("\n")
+		}
+		
+		// Verify contents
+		output.WriteString("--- Verifying Contents ---\n")
+		mountPath := fmt.Sprintf("%s\\", selectedDrive)
+		output.WriteString(fmt.Sprintf("Verifying contents of physical drive at: %s\n", mountPath))
+		output.WriteString(fmt.Sprintf("Searching for checksum files (*.sha, sha256sum.txt, SHA256SUMS) in %s...\n", mountPath))
+		
+		// Find checksum files
+		checksumFiles, err := findChecksumFiles(mountPath)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Warning: Error finding checksum files: %v\n", err))
+		} else if len(checksumFiles) == 0 {
+			output.WriteString("Warning: Could not find any checksum files (*.sha, sha256sum.txt, SHA256SUMS) on the media.\n")
+		} else {
+			output.WriteString(fmt.Sprintf("\nFound %d checksum file(s):\n", len(checksumFiles)))
+			for i, cf := range checksumFiles {
+				relPath, err := filepath.Rel(mountPath, cf)
+				if err != nil {
+					relPath = cf
+				}
+				output.WriteString(fmt.Sprintf("  %d. %s\n", i+1, relPath))
+			}
+			output.WriteString("\n")
+			
+			totalFiles := 0
+			failedFiles := 0
+			
+			for _, checksumFile := range checksumFiles {
+				output.WriteString(fmt.Sprintf("Processing checksum file: %s\n", filepath.Base(checksumFile)))
+				baseDir := filepath.Dir(checksumFile)
+				
+				// Process checksum file
+				files, failed := processChecksumFile(checksumFile, baseDir, output)
+				totalFiles += files
+				failedFiles += failed
+				output.WriteString("\n")
+			}
+			
+			output.WriteString("--- Verification Summary ---\n")
+			output.WriteString(fmt.Sprintf("Checksum files processed: %d\n", len(checksumFiles)))
+			output.WriteString(fmt.Sprintf("Total files verified: %d\n", totalFiles))
+			
+			if failedFiles == 0 && totalFiles > 0 {
+				output.WriteString(fmt.Sprintf("Success: All %d files verified successfully.\n", totalFiles))
+			} else if totalFiles == 0 {
+				output.WriteString("No files were verified.\n")
+			} else {
+				output.WriteString(fmt.Sprintf("Failure: %d out of %d files failed verification.\n", failedFiles, totalFiles))
+			}
+		}
+		
+		resultText.Synchronize(func() {
+			resultText.SetText(output.String())
+		})
+	}()
+}
+
+// browseForISOWithOptions is a wrapper that adds MD5 check option
+func browseForISOWithOptions(resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner walk.Form, md5Check bool) {
+	dlg := new(walk.FileDialog)
+	dlg.Title = "Select ISO file to verify"
+	dlg.Filter = "ISO Files (*.iso)|*.iso|All Files (*.*)|*.*"
+	
+	accepted, err := dlg.ShowOpen(owner)
+	if err != nil {
+		resultText.SetText(fmt.Sprintf("Error opening file dialog: %v", err))
+		return
+	}
+	
+	if !accepted {
+		// User cancelled
+		return
+	}
+	
+	isoPath := dlg.FilePath
+	if isoPath == "" {
+		return
+	}
+	
+	// Verify the selected ISO file
+	verifyISOFileWithOptions(isoPath, resultText, verifyBtn, md5Check)
+}
+
+// handleDroppedFilesWithOptions is a wrapper that adds MD5 check option
+func handleDroppedFilesWithOptions(files []string, resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner walk.Form, md5Check bool) {
+	if len(files) == 0 {
+		return
+	}
+	
+	// Only process the first file
+	filePath := files[0]
+	
+	// Check if it's an ISO file
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext != ".iso" {
+		resultText.SetText(fmt.Sprintf("Error: Only ISO files are supported.\n\nYou dropped: %s\n\nPlease drop an ISO file (.iso extension) onto this window.", filepath.Base(filePath)))
+		return
+	}
+	
+	// Verify the dropped ISO file
+	verifyISOFileWithOptions(filePath, resultText, verifyBtn, md5Check)
+}
+
+// verifyISOFileWithOptions performs verification on an ISO file with MD5 option
+func verifyISOFileWithOptions(isoPath string, resultText *walk.TextEdit, verifyBtn *walk.PushButton, md5Check bool) {
+	// Disable button during verification
+	verifyBtn.SetEnabled(false)
+	
+	resultText.SetText(fmt.Sprintf("Verifying ISO file: %s\n\nPlease wait, this may take a few minutes...\n\n", filepath.Base(isoPath)))
+	
+	// Run verification in a goroutine
+	go func() {
+		defer func() {
+			verifyBtn.Synchronize(func() {
+				verifyBtn.SetEnabled(true)
+			})
+		}()
+		
+		// Create config for the ISO file
+		config := &Config{
+			Path:     isoPath,
+			NoVerify: false,
+			MD5Check: md5Check,
+		}
+		
+		// Validate path
+		if err := validatePath(config); err != nil {
+			resultText.Synchronize(func() {
+				resultText.AppendText(fmt.Sprintf("Error: %v\n", err))
+			})
+			return
+		}
+		
+		output := &strings.Builder{}
+		output.WriteString(fmt.Sprintf("=== Verifying ISO File ===\n"))
+		output.WriteString(fmt.Sprintf("File: %s\n\n", filepath.Base(isoPath)))
+		
+		// Display SHA256 Hash
+		output.WriteString("--- SHA256 Hash ---\n")
+		calculatedHash, err := getSha256FromPath(config)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Error calculating hash: %v\n", err))
+		} else {
+			output.WriteString(fmt.Sprintf("SHA256: %s\n", strings.ToLower(calculatedHash)))
+		}
+		output.WriteString("\n")
+		
+		// Try MD5 check if requested
+		if md5Check {
+			output.WriteString("--- Checking for Implanted MD5 ---\n")
+			md5Result, err := checkImplantedMD5(config)
+			if err != nil {
+				output.WriteString(fmt.Sprintf("Error: %v\n", err))
+			} else if md5Result == nil {
+				output.WriteString("No implanted MD5 signature found.\n")
+			} else {
+				output.WriteString(fmt.Sprintf("Verification Method: %s\n", md5Result.VerificationMethod))
+				output.WriteString(fmt.Sprintf("Stored MD5:          %s\n", md5Result.StoredMD5))
+				output.WriteString(fmt.Sprintf("Calculated MD5:      %s\n", md5Result.CalculatedMD5))
+				if md5Result.IsIntegrityOK {
+					output.WriteString("Result: SUCCESS - Implanted MD5 is valid.\n")
+				} else {
+					output.WriteString("Result: FAILURE - Implanted MD5 does not match.\n")
+				}
+			}
+			output.WriteString("\n")
+		}
+		
+		output.WriteString("--- Summary ---\n")
+		output.WriteString("ISO file verification complete.\n")
+		output.WriteString("\nNote: Content verification requires the ISO to be mounted.\n")
+		output.WriteString("To verify file contents, mount the ISO and select the drive from the dropdown.")
+		
+		resultText.Synchronize(func() {
+			resultText.SetText(output.String())
+		})
+	}()
 }

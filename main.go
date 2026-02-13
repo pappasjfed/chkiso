@@ -36,6 +36,7 @@ type Config struct {
 	NoVerify           bool
 	MD5Check           bool
 	Dismount           bool
+	GuiMode            bool   // Explicitly request GUI mode
 	isDrive            bool
 	driveLetter        string
 	mountedISO         bool   // Track if we mounted the ISO (vs user-mounted)
@@ -43,6 +44,20 @@ type Config struct {
 }
 
 func main() {
+	// Check for explicit GUI flag first (before any other processing)
+	// This allows users to force GUI mode from command line
+	for _, arg := range os.Args[1:] {
+		if arg == "-gui" || arg == "--gui" {
+			if runtime.GOOS == "windows" {
+				runGUI()
+				return
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: GUI mode is only supported on Windows\n")
+				os.Exit(1)
+			}
+		}
+	}
+	
 	// Check if we should run in GUI mode (Windows only)
 	// GUI mode is triggered when:
 	// 1. Running on Windows
@@ -142,6 +157,9 @@ func parseFlags() *Config {
 		case arg == "-dismount" || arg == "--dismount" || arg == "-eject" || arg == "--eject":
 			config.Dismount = true
 			i++
+		case arg == "-gui" || arg == "--gui":
+			config.GuiMode = true
+			i++
 		default:
 			// Positional argument
 			args = append(args, arg)
@@ -180,6 +198,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  -md5                Enable implanted MD5 check\n")
 	fmt.Fprintf(os.Stderr, "  -dismount           Dismount/eject after verification\n")
 	fmt.Fprintf(os.Stderr, "  -eject              Alias for -dismount\n")
+	fmt.Fprintf(os.Stderr, "  -gui                Launch GUI mode (Windows only)\n")
 	fmt.Fprintf(os.Stderr, "  -version            Display version information\n")
 	fmt.Fprintf(os.Stderr, "  -help               Display this help information\n")
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
@@ -189,6 +208,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  chkiso -shafile hashes.sha image.iso\n")
 	fmt.Fprintf(os.Stderr, "  chkiso -md5 image.iso\n")
 	fmt.Fprintf(os.Stderr, "  chkiso -noverify E:\n")
+	fmt.Fprintf(os.Stderr, "  chkiso -gui         (Windows: Launch GUI mode)\n")
 }
 
 func validatePath(config *Config) error {
