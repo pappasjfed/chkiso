@@ -304,13 +304,6 @@ func processChecksumFile(checksumFile, baseDir string, output *strings.Builder) 
 	totalFiles := 0
 	failedFiles := 0
 	
-	file, err := os.Open(checksumFile)
-	if err != nil {
-		output.WriteString(fmt.Sprintf("Warning: Could not open checksum file: %v\n", err))
-		return totalFiles, failedFiles
-	}
-	defer file.Close()
-	
 	// Read file content
 	content, err := os.ReadFile(checksumFile)
 	if err != nil {
@@ -337,7 +330,7 @@ func processChecksumFile(checksumFile, baseDir string, output *strings.Builder) 
 			continue
 		}
 		
-		// Get filename (everything after the hash)
+		// Get filename (everything after the hash, removing optional asterisk)
 		fileName := strings.TrimSpace(strings.TrimPrefix(line, parts[0]))
 		fileName = strings.TrimPrefix(fileName, "*")
 		fileName = strings.TrimSpace(fileName)
