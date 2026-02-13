@@ -43,6 +43,25 @@ type Config struct {
 }
 
 func main() {
+	// Check if we should run in GUI mode (Windows only)
+	// GUI mode is triggered when:
+	// 1. Running on Windows
+	// 2. No command-line arguments provided (or only the executable name)
+	// 3. No console is attached (double-clicked from Explorer)
+	if runtime.GOOS == "windows" && len(os.Args) == 1 && !hasConsole() {
+		runGUI()
+		return
+	}
+	
+	// If we have a console on Windows but no arguments, try to attach to parent console
+	// This makes it work better when run from cmd.exe or PowerShell
+	if runtime.GOOS == "windows" && len(os.Args) == 1 && hasConsole() {
+		// Running from console but no args - show usage
+		printUsage()
+		os.Exit(1)
+	}
+	
+	// CLI mode
 	config := parseFlags()
 	
 	// Validate and resolve the path
