@@ -23,10 +23,16 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 
 **✅ Reliable**: The new Fyne-based GUI works on all Windows systems without the tooltip control issues of the previous version.
 
+**⚠️ Platform Note**: 
+- **Windows AMD64**: Full GUI support with Fyne
+- **Windows ARM64**: CLI-only (GUI requires OpenGL which isn't available for ARM64 cross-compilation)
+- **Linux**: GUI available (requires display server)
+
 ### How to Use the GUI
 
 1. **Launch the GUI:**
-   - **Windows**: Double-click `chkiso-windows-amd64.exe` (automatically launches GUI if no arguments)
+   - **Windows AMD64**: Double-click `chkiso-windows-amd64.exe` (automatically launches GUI if no arguments)
+   - **Windows ARM64**: Use CLI mode (see Command Line Usage section)
    - **Linux**: Run `./chkiso -gui` (GUI available as bonus feature!)
    - **Command line**: `chkiso.exe -gui` (explicitly launch GUI mode)
 2. A modern window will appear with:
