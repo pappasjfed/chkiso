@@ -245,19 +245,15 @@ func runGUI() {
 	logDebug("Building GUI window with %d children widgets", len(children))
 	logDebug("Creating MainWindow...")
 	
+	// Create MainWindow without OnDropFiles to reduce widget complexity
+	// OnDropFiles requires additional internal structures that may trigger TTM_ADDTOOL
 	err := MainWindow{
 		AssignTo: &mainWindow,
 		Title:    fmt.Sprintf("chkiso - ISO/Drive Verification Tool v%s", VERSION),
 		MinSize:  Size{Width: 600, Height: 400},
 		Size:     Size{Width: 700, Height: 500},
 		Layout:   VBox{},
-		OnDropFiles: func(files []string) {
-			md5Check := false
-			if md5CheckBox != nil {
-				md5Check = md5CheckBox.Checked()
-			}
-			handleDroppedFilesWithOptions(files, resultTextEdit, verifyButton, mainWindow, md5Check)
-		},
+		// OnDropFiles removed temporarily to reduce widget complexity
 		Children: children,
 	}.Create()
 	
