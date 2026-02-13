@@ -17,10 +17,21 @@ This document provides instructions for testing the new GUI mode on Windows.
 3. **Expected Result**: A GUI window should appear with:
    - Title: "chkiso - ISO/Drive Verification Tool v2.0.0"
    - A "Select Drive:" label
-   - A dropdown menu listing all CD-ROM/DVD drives
+   - A dropdown menu listing all CD-ROM/DVD drives (or "<No CD-ROM drives found>" if none present)
+   - A "Browse for ISO file..." button
    - A "Verify" button
-   - An empty text area for results
+   - A text area for results
    - A "Close" button at the bottom
+
+#### Test 1b: Launch GUI with No Drives Detected
+1. Launch the GUI on a system with no CD-ROM drives
+2. **Expected Result**: 
+   - The GUI window should open (not disappear immediately)
+   - The dropdown shows "<No CD-ROM drives found>"
+   - The text area displays a helpful error message with instructions
+   - The "Verify" button is disabled
+   - The "Browse for ISO file..." button is available and functional
+   - User can click "Browse for ISO file..." to select an ISO file for verification
 
 #### Test 2: Drive Selection and Default
 1. Launch the GUI as in Test 1
@@ -44,24 +55,48 @@ This document provides instructions for testing the new GUI mode on Windows.
      - Summary of verification (Success or Failure)
    - The "Verify" button should be re-enabled when complete
 
-#### Test 4: Close the GUI
+#### Test 4: Browse for ISO File
+1. Launch the GUI
+2. Click "Browse for ISO file..." button
+3. **Expected Result**: 
+   - A file dialog should appear
+   - Filter should show "ISO Files (*.iso)" by default
+4. Select an ISO file and click Open
+5. **Expected Result**:
+   - The text area should show "Verifying ISO file: [filename]..."
+   - Verification should start automatically
+   - Results should appear showing:
+     - File name
+     - SHA256 hash
+     - Implanted MD5 check (if present)
+     - Summary message
+   - The "Verify" button should be re-enabled when complete
+6. Cancel the file dialog
+7. **Expected Result**: Nothing happens, window stays open
+
+#### Test 5: Close the GUI
 1. After verification completes (or at any time)
 2. Click the "Close" button
 3. **Expected Result**: The window should close immediately
 
-#### Test 5: Launch from Command Prompt
+#### Test 5: Close the GUI
+1. After verification completes (or at any time)
+2. Click the "Close" button
+3. **Expected Result**: The window should close immediately
+
+#### Test 6: Launch from Command Prompt
 1. Open Command Prompt (cmd.exe)
 2. Navigate to the directory with the executable
 3. Run: `chkiso-windows-amd64.exe` (with no arguments)
 4. **Expected Result**: The program should display usage/help text in the console (NOT launch GUI)
 
-#### Test 6: Launch from PowerShell
+#### Test 7: Launch from PowerShell
 1. Open PowerShell
 2. Navigate to the directory with the executable
 3. Run: `.\chkiso-windows-amd64.exe` (with no arguments)
 4. **Expected Result**: The program should display usage/help text in the console (NOT launch GUI)
 
-#### Test 7: CLI Mode with Arguments
+#### Test 8: CLI Mode with Arguments
 1. Open Command Prompt or PowerShell
 2. Run: `chkiso-windows-amd64.exe --version`
 3. **Expected Result**: Should display version information in the console
@@ -83,9 +118,15 @@ The program uses the following logic to determine mode:
 ## Troubleshooting
 
 ### No drives appear in dropdown
-- Ensure you have a physical or virtual CD-ROM drive
-- The drive must be recognized by Windows as a CD-ROM drive (type 5)
-- USB drives and hard drives will NOT appear in the list
+- **This is now handled gracefully**: The GUI will display "<No CD-ROM drives found>"
+- The window will stay open with helpful instructions
+- Use the "Browse for ISO file..." button to verify ISO files from your hard drive
+- Or insert a CD/DVD or mount an ISO, then relaunch the application
+
+### Window disappears immediately (FIXED)
+- **Previous issue**: Window would close instantly if no drives were found
+- **Now fixed**: Window stays open with error message and browse option
+- If you still experience this issue, please report with details
 
 ### GUI doesn't launch when double-clicking
 - Check that you're running on Windows

@@ -26,15 +26,23 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 1. **Double-click** the `chkiso-windows-amd64.exe` file (or run it without any command-line arguments)
 2. A window will appear showing:
    - A dropdown list of all CD-ROM/DVD drives on your system
+   - A "Browse for ISO file..." button to verify ISO files from your hard drive
    - A "Verify" button to start the verification
    - A results area showing the verification progress and results
    - A "Close" button to exit the application
-3. **Select** the drive you want to verify from the dropdown
+3. **To verify a CD/DVD drive:**
+   - Select the drive you want to verify from the dropdown
    - If you run chkiso from a CD/DVD drive, that drive will be pre-selected
-4. Click **"Verify"** to start the verification process
+   - Click "Verify" to start the verification process
+4. **To verify an ISO file:**
+   - Click "Browse for ISO file..." button
+   - Select the ISO file from your computer
+   - The verification will start automatically
 5. Wait for the verification to complete (this may take several minutes)
 6. Review the results in the text area
-7. Click **"Close"** when finished
+7. Click "Close" when finished
+
+**Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message and the "Browse for ISO file..." button will allow you to verify ISO files directly.
 
 ### GUI vs Command Line
 
