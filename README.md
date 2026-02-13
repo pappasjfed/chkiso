@@ -17,38 +17,37 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
   - External hash file verification
   - Content verification against embedded checksums
 
-## GUI Mode (Windows)
+## GUI Mode (Windows & Linux)
 
-**New!** chkiso now includes a graphical user interface for Windows users. Perfect for non-technical users who want to verify optical media without using the command line.
+**New!** chkiso now includes a modern graphical user interface using Fyne. Perfect for non-technical users who want to verify optical media without using the command line.
 
-**⚠️ Important**: GUI mode may not work on all Windows systems due to Windows tooltip control limits. If the GUI fails to launch, the program will show clear instructions for using the command-line interface, which provides all the same functionality.
+**✅ Reliable**: The new Fyne-based GUI works on all Windows systems without the tooltip control issues of the previous version.
 
 ### How to Use the GUI
 
 1. **Launch the GUI:**
-   - **Double-click** the `chkiso-windows-amd64.exe` file (automatically launches GUI)
-   - **OR** run from command line: `chkiso.exe -gui` (explicitly launch GUI mode)
-   - **If GUI fails**: Follow the on-screen instructions to use CLI mode instead
-2. A window will appear with controls arranged vertically:
-   - A "Select Drive:" label
-   - A dropdown list of all CD-ROM/DVD drives on your system
-   - A "Verify" button to start drive verification
-   - A "Browse for ISO file..." button to verify ISO files from your hard drive
-   - **MD5 checkbox** (if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
-   - A large results area showing the verification progress and results
-   - A "Close" button at the bottom to exit the application
+   - **Windows**: Double-click `chkiso-windows-amd64.exe` (automatically launches GUI if no arguments)
+   - **Linux**: Run `./chkiso -gui` (GUI available as bonus feature!)
+   - **Command line**: `chkiso.exe -gui` (explicitly launch GUI mode)
+2. A modern window will appear with:
+   - **Select Drive** dropdown - Lists all CD-ROM/DVD drives on your system
+   - **Verify Drive** button - Starts drive verification
+   - **Browse for ISO file...** button - Opens file picker to verify ISO files
+   - **MD5 checkbox** (if checkisomd5.exe is available) - "Verify implanted MD5 (checkisomd5)"
+   - **Scrollable results area** - Shows verification progress and results
+   - **Close** button - Exit the application
 3. **To verify a CD/DVD drive:**
    - Select the drive you want to verify from the dropdown
    - If you run chkiso from a CD/DVD drive, that drive will be pre-selected
    - Optionally check the MD5 checkbox if available
-   - Click "Verify" to start the verification process
+   - Click "Verify Drive" to start the verification process
    - **Note**: If a drive is empty, you'll get a helpful message
-4. **To verify an ISO file (2 ways):**
-   - **Option 1**: Click "Browse for ISO file..." and select the ISO
-   - **Option 2**: Use command-line mode (see below)
+4. **To verify an ISO file:**
+   - Click "Browse for ISO file..." and select the ISO from the file picker
    - The MD5 checkbox (if available) applies to ISO verification too
+   - Verification starts automatically after selecting a file
 5. Wait for the verification to complete (this may take several minutes)
-6. Review the results in the text area
+6. Review the results in the scrollable text area
 7. Click "Close" when finished
 
 **Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message. You can use the browse button to verify ISO files.
@@ -84,20 +83,20 @@ If you encounter errors when launching the GUI:
    - Check this file for detailed error information
 
 2. **Common Issues**:
-   - **TTM_ADDTOOL errors**: This is a Windows tooltip control limit error
-     - **Not fully fixable**: The walk GUI library is incompatible with some Windows configurations
-     - **Workaround**: Use command-line interface (CLI) mode instead - it has all the same features
-     - The error dialog will show CLI usage instructions
+   - **Display issues**: Fyne requires OpenGL support
+     - Ensure your graphics drivers are up to date
+     - Windows amd64 builds include GUI support
+     - Windows arm64 builds are CLI-only
    - **Window creation failures**: May be due to system resource constraints
-   - The error dialog will show the log file location
+   - The debug log will show the error details
    
    **Technical Notes**: 
-   - GUI uses Dialog window with tooltips disabled to minimize Windows API calls
-   - Drag-and-drop disabled to reduce complexity
-   - CLI mode always works and provides identical functionality
+   - GUI uses Fyne framework (modern, cross-platform)
+   - No Windows tooltip control limits (previous walk library issue resolved!)
+   - Requires OpenGL for rendering
+   - Linux GUI support available as bonus feature
 
 3. **If GUI Doesn't Work**:
-   - The error message will provide clear CLI instructions
    - All GUI features are available in CLI mode:
      - Drive verification: `chkiso.exe E:\`
      - ISO verification: `chkiso.exe path\to\file.iso`
