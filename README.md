@@ -23,35 +23,53 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 
 ### How to Use the GUI
 
-1. **Double-click** the `chkiso-windows-amd64.exe` file (or run it without any command-line arguments)
+1. **Launch the GUI:**
+   - **Double-click** the `chkiso-windows-amd64.exe` file (automatically launches GUI)
+   - **OR** run from command line: `chkiso.exe -gui` (explicitly launch GUI mode)
 2. A window will appear showing:
    - A dropdown list of all CD-ROM/DVD drives on your system
    - A "Browse for ISO file..." button to verify ISO files from your hard drive
+   - **MD5 checkbox** (if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
    - A "Verify" button to start the verification
    - A results area showing the verification progress and results (also accepts drag-and-drop)
    - A "Close" button to exit the application
 3. **To verify a CD/DVD drive:**
    - Select the drive you want to verify from the dropdown
    - If you run chkiso from a CD/DVD drive, that drive will be pre-selected
+   - Optionally check the MD5 checkbox if available
    - Click "Verify" to start the verification process
    - **Note**: If a drive is empty, you'll get a helpful message
 4. **To verify an ISO file (3 ways):**
    - **Option 1**: Click "Browse for ISO file..." and select the ISO
    - **Option 2**: Drag and drop an ISO file onto the window
    - **Option 3**: Use command-line mode (see below)
+   - The MD5 checkbox (if available) applies to ISO verification too
 5. Wait for the verification to complete (this may take several minutes)
 6. Review the results in the text area
 7. Click "Close" when finished
 
 **Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message. You can use the browse button or drag-and-drop to verify ISO files.
 
+### MD5 Verification in GUI
+
+The GUI includes an optional MD5 checkbox if `checkisomd5.exe` is available:
+- The checkbox only appears if the tool is found in PATH or the same directory as chkiso.exe
+- Check the box to verify implanted MD5 signatures (compatible with checkisomd5 tool)
+- Applies to both drive and ISO file verification
+- Results show in the verification output
+
 ### GUI vs Command Line
 
 The program automatically detects how it's being run:
-- **GUI Mode**: When double-clicked from File Explorer (no console attached)
+- **GUI Mode**: When double-clicked from File Explorer (no console attached) OR when run with `-gui` flag
 - **Command-Line Mode**: When run from PowerShell, Command Prompt, or with arguments
 
 This means you can use the same executable for both GUI and command-line operations!
+
+**To explicitly launch GUI from command line:**
+```
+chkiso.exe -gui
+```
 
 ## Installation
 

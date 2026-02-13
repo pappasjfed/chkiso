@@ -19,11 +19,20 @@ This document provides instructions for testing the new GUI mode on Windows.
    - A "Select Drive:" label
    - A dropdown menu listing all CD-ROM/DVD drives (or "<No CD-ROM drives found>" if none present)
    - A "Browse for ISO file..." button
+   - **MD5 checkbox** (only if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
    - A "Verify" button
    - A text area for results
    - A "Close" button at the bottom
 
-#### Test 1b: Launch GUI with No Drives Detected
+#### Test 1b: Launch GUI from Command Line with -gui Flag
+1. Open Command Prompt or PowerShell
+2. Run: `chkiso-windows-amd64.exe -gui`
+3. **Expected Result**: 
+   - GUI window launches (same as double-clicking)
+   - All components visible as described in Test 1
+   - Works even when run from console
+
+#### Test 1c: Launch GUI with No Drives Detected
 1. Launch the GUI on a system with no CD-ROM drives
 2. **Expected Result**: 
    - The GUI window should open (not disappear immediately)
@@ -32,6 +41,17 @@ This document provides instructions for testing the new GUI mode on Windows.
    - The "Verify" button is disabled
    - The "Browse for ISO file..." button is available and functional
    - User can click "Browse for ISO file..." to select an ISO file for verification
+
+#### Test 1d: MD5 Checkbox Visibility
+1. Check if checkisomd5.exe is in PATH or same directory as chkiso.exe
+2. Launch the GUI
+3. **Expected Result if checkisomd5.exe is present**:
+   - MD5 checkbox appears with text "Verify implanted MD5 (checkisomd5)"
+   - Checkbox is unchecked by default
+   - Can be checked/unchecked
+4. **Expected Result if checkisomd5.exe is NOT present**:
+   - No MD5 checkbox appears
+   - All other GUI elements work normally
 
 #### Test 2: Drive Selection and Default
 1. Launch the GUI as in Test 1
@@ -54,6 +74,17 @@ This document provides instructions for testing the new GUI mode on Windows.
      - Verification results for each file
      - Summary of verification (Success or Failure)
    - The "Verify" button should be re-enabled when complete
+
+#### Test 3b: Verify a Drive with MD5 Checkbox
+1. Launch the GUI (ensure checkisomd5.exe is available)
+2. Select a drive with a disc that has implanted MD5
+3. **Check** the "Verify implanted MD5 (checkisomd5)" checkbox
+4. Click "Verify"
+5. **Expected Result**:
+   - Verification proceeds as normal
+   - Results include an additional "Verifying Implanted MD5" section
+   - Shows stored MD5, calculated MD5, and success/failure
+   - If no implanted MD5: Shows "No implanted MD5 signature found"
 
 #### Test 4: Verify Empty Drive
 1. Launch the GUI with a CD-ROM drive that has no disc
