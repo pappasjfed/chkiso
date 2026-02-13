@@ -82,9 +82,11 @@ If you encounter errors when launching the GUI:
    - Check this file for detailed error information
 
 2. **Common Issues**:
-   - **TTM_ADDTOOL errors**: ~~Usually related to Windows tooltip controls~~ **FIXED in v2.0.0** - Widget structure simplified to avoid tooltip limits
+   - **TTM_ADDTOOL errors**: ~~Usually related to Windows tooltip controls~~ **FIXED in v2.0.0** - Tooltips explicitly disabled on all widgets to avoid Windows API limits
    - **Window creation failures**: May be due to system resource constraints
    - The error dialog will show the log file location
+   
+   **Note**: Tooltips are disabled in the GUI to prevent TTM_ADDTOOL errors. This means hovering over controls won't show additional information, but all functionality is preserved.
 
 3. **What to do**:
    - Check the debug log file for details

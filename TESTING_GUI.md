@@ -227,9 +227,10 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 - Try launching with `-gui` flag from command line to see error messages
 
 ### GUI creation errors (e.g., TTM_ADDTOOL failed) - FIXED
-- **Status**: **FIXED in v2.0.0** - Widget structure simplified to avoid Windows tooltip limits
-- **Previous issue**: Nested composite widgets exceeded tooltip control limits
-- **Solution**: Flattened widget hierarchy to prevent TTM_ADDTOOL errors
+- **Status**: **FIXED in v2.0.0** - Tooltips explicitly disabled on all widgets
+- **Previous issue**: Windows tooltip control limits exceeded even with flat structure
+- **Solution**: Added `ToolTipText: ""` to all widgets to prevent tooltip creation
+- **Tradeoff**: No tooltips appear on hover, but GUI is fully functional
 - If you still encounter this error:
   - **Check the debug log**: The error dialog will show the log file path
   - Try running as administrator
