@@ -93,7 +93,7 @@ This document provides instructions for testing the new GUI mode on Windows.
 3. Click "Verify"
 4. **Expected Result**:
    - Text area displays message: "Drive X: is detected but empty"
-   - Provides instructions to insert disc or use browse/drag-drop
+   - Provides instructions to insert disc or use browse button
    - Verify button is re-enabled
    - No crash or error dialog
 
@@ -116,19 +116,13 @@ This document provides instructions for testing the new GUI mode on Windows.
 6. Cancel the file dialog
 7. **Expected Result**: Nothing happens, window stays open
 
-#### Test 6: Drag and Drop ISO File
-1. Launch the GUI
-2. Open File Explorer and navigate to an ISO file
-3. Drag the ISO file and drop it onto the GUI window
-4. **Expected Result**:
-   - The text area should show "Verifying ISO file: [filename]..."
-   - Verification should start automatically
-   - Same results as browse method (SHA256, MD5, summary)
-5. Try dragging a non-ISO file (e.g., .txt, .exe)
-6. **Expected Result**:
-   - Error message: "Only ISO files are supported"
-   - Shows which file was dropped
-   - No verification starts
+#### Test 6: Drag and Drop ISO File - TEMPORARILY DISABLED
+**Note**: Drag-and-drop functionality has been temporarily disabled to resolve Windows tooltip control errors (TTM_ADDTOOL). Use "Browse for ISO file..." button instead.
+
+~~1. Launch the GUI~~
+~~2. Open File Explorer and navigate to an ISO file~~
+~~3. Drag the ISO file and drop it onto the GUI window~~
+~~4. **Expected Result**: Verification should start~~
 
 #### Test 7: Close the GUI
 1. After verification completes (or at any time)
@@ -189,10 +183,10 @@ The program uses the following logic to determine mode:
 - Empty drives (no disc inserted) are detected and handled with helpful messages
 
 ### Multiple Verification Methods
-The GUI supports three ways to verify ISO files:
+The GUI supports two ways to verify ISO files:
 1. **Drive dropdown**: Select a CD-ROM/DVD drive and click "Verify"
 2. **Browse button**: Click "Browse for ISO file..." to select an ISO via file dialog
-3. **Drag and drop**: Drag an ISO file from File Explorer and drop it onto the window
+~~3. **Drag and drop**: Temporarily disabled to prevent Windows tooltip errors~~
 
 All methods provide the same comprehensive verification (SHA256 + MD5 + file contents when applicable)
 

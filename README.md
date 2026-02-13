@@ -32,7 +32,7 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
    - A "Verify" button to start drive verification
    - A "Browse for ISO file..." button to verify ISO files from your hard drive
    - **MD5 checkbox** (if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
-   - A large results area showing the verification progress and results (also accepts drag-and-drop)
+   - A large results area showing the verification progress and results
    - A "Close" button at the bottom to exit the application
 3. **To verify a CD/DVD drive:**
    - Select the drive you want to verify from the dropdown
@@ -40,11 +40,11 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
    - Optionally check the MD5 checkbox if available
    - Click "Verify" to start the verification process
    - **Note**: If a drive is empty, you'll get a helpful message
-4. **To verify an ISO file (3 ways):**
+4. **To verify an ISO file (2 ways):**
    - **Option 1**: Click "Browse for ISO file..." and select the ISO
-   - **Option 2**: Drag and drop an ISO file onto the results area
-   - **Option 3**: Use command-line mode (see below)
+   - **Option 2**: Use command-line mode (see below)
    - The MD5 checkbox (if available) applies to ISO verification too
+   - **Note**: Drag-and-drop temporarily disabled to prevent Windows tooltip errors
 5. Wait for the verification to complete (this may take several minutes)
 6. Review the results in the text area
 7. Click "Close" when finished
