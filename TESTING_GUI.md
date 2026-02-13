@@ -1,40 +1,33 @@
 # GUI Testing Guide
 
-This document provides instructions for testing the GUI mode on Windows.
+This document provides instructions for testing the Fyne-based GUI mode.
 
-## ⚠️ Important Note
+## Overview
 
-**GUI mode may not work on all Windows systems** due to Windows tooltip control limits in the walk library. If you encounter a "TTM_ADDTOOL failed" error:
-- This is a known limitation of the walk GUI library
-- The error dialog will provide clear instructions to use CLI mode instead
-- CLI mode has all the same features as GUI mode
-- See the main README for CLI usage examples
+The GUI has been rewritten using **Fyne** - a modern, cross-platform Go GUI framework. This eliminates the Windows tooltip control issues from the previous walk library implementation.
 
 ## Testing the GUI Mode
 
 ### Prerequisites
-- Windows 10 or Windows 11
+- **Windows 10 or Windows 11** (for Windows testing)
+- **OR Linux with X11/Wayland** (bonus: GUI works on Linux too!)
 - A CD/DVD drive with bootable media (e.g., Linux installation disc) (optional)
-- The `chkiso-windows-amd64.exe` binary
+- The `chkiso-windows-amd64.exe` binary (Windows) or `chkiso` binary (Linux)
 
 ### Test Cases
 
-#### Test 1: Launch GUI from File Explorer
+#### Test 1: Launch GUI from File Explorer (Windows)
 1. Navigate to the directory containing `chkiso-windows-amd64.exe` in File Explorer
 2. **Double-click** the executable
-3. **Possible Results**:
-   - **Success**: A GUI window appears (see below for layout)
-   - **Failure**: Error dialog appears with "TTM_ADDTOOL failed" and CLI instructions - this is a known limitation
-4. **If GUI opens successfully**, it should show:
+3. **Expected Result**: A modern Fyne window appears with:
    - Title: "chkiso - ISO/Drive Verification Tool v2.0.0"
-   - A "Select Drive:" label at the top
-   - A dropdown menu listing all CD-ROM/DVD drives (or "<No CD-ROM drives found>" if none present)
-   - A "Verify" button below the dropdown
-   - A "Browse for ISO file..." button
+   - **Select Drive** dropdown at the top
+   - **Verify Drive** button
+   - **Browse for ISO file...** button
    - **MD5 checkbox** (only if checkisomd5.exe is available): "Verify implanted MD5 (checkisomd5)"
-   - A large text area for results (takes most of the window)
-   - A "Close" button at the bottom
-   - Note: Controls are arranged vertically to avoid Windows tooltip limits
+   - Scrollable text area for results
+   - **Close** button at the bottom
+   - Modern, clean interface using Material Design
 
 #### Test 1b: Launch GUI from Command Line with -gui Flag
 1. Open Command Prompt or PowerShell
@@ -226,40 +219,41 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 - If you still experience this issue, please report with details
 
 ### GUI doesn't launch when double-clicking
-- Check that you're running on Windows
-- Ensure you're double-clicking from File Explorer (not running from a console)
-- Check Windows Event Viewer for any error messages
+- Check that you're running Windows 10 or 11
+- Ensure graphics drivers are up to date (Fyne requires OpenGL)
 - Try launching with `-gui` flag from command line to see error messages
+- Check the debug log file for details
 
-### GUI creation errors (e.g., TTM_ADDTOOL failed) - KNOWN LIMITATION
-- **Status**: **Not fully fixable** - This is a walk library limitation
-- **Issue**: Some Windows systems hit tooltip control limits when creating GUI
-- **What we tried**:
-  - Replaced MainWindow with Dialog (simpler structure)
-  - Disabled tooltips on all widgets (`ToolTipText: ""`)
-  - Removed OnDropFiles and drag-drop features
-  - Flattened widget hierarchy
-- **Result**: Improved but not guaranteed to work on all systems
-- **If you encounter this error**:
-  - This is expected on some Windows configurations
-  - The error dialog will provide clear CLI usage instructions
-  - **Use CLI mode instead** - it has all the same features:
-    ```
-    chkiso.exe E:\           # Verify drive
-    chkiso.exe file.iso      # Verify ISO
-    chkiso.exe file.iso -md5 # With MD5 check
-    ```
-  - Check the debug log for technical details
-  - No need to report - this is a known library limitation
+### Display or rendering issues
+- **Cause**: Fyne requires OpenGL support
+- **Solutions**:
+  - Update graphics drivers
+  - Ensure OpenGL is available on your system
+  - Try running from command line to see specific errors
+- **Workaround**: Use CLI mode if GUI doesn't work
 
 ### GUI freezes during verification
-- This should not happen as verification runs asynchronously
+- This should not happen as verification runs asynchronously in a goroutine
 - If it does freeze, this is a bug - please report with details
+- Include debug log file when reporting
 
 ### Verification takes a long time
 - This is normal for large drives or slow drives
 - Calculating SHA256 for an entire drive can take several minutes
 - Content verification depends on the number of files and their sizes
+
+## Known Behavior
+
+### Fyne Framework
+- Uses OpenGL for rendering (hardware accelerated)
+- Modern Material Design interface
+- Cross-platform (works on Windows and Linux)
+- Larger binary size (~8-10 MB vs ~3 MB for CLI-only)
+
+### Windows arm64
+- GUI is not available (no CGO cross-compiler)
+- CLI mode works perfectly
+- Use `chkiso -help` for all CLI options
 
 ## Reporting Issues
 
