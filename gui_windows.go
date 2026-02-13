@@ -265,18 +265,36 @@ func runGUI() {
 			logPath = logFile.Name()
 		}
 		
-		errorMsg := fmt.Sprintf("Failed to create window: %v\n\n", err)
-		errorMsg += "This error can occur due to:\n"
-		errorMsg += "• Windows Common Controls issues\n"
-		errorMsg += "• Too many GUI elements\n"
-		errorMsg += "• System resource constraints\n\n"
+		// Special handling for TTM_ADDTOOL error with helpful workaround
+		errorMsg := fmt.Sprintf("Failed to create GUI window: %v\n\n", err)
 		
-		if logPath != "" {
-			errorMsg += fmt.Sprintf("Debug log saved to:\n%s\n\n", logPath)
-			errorMsg += "Please check the log file for more details."
+		if strings.Contains(err.Error(), "TTM_ADDTOOL") {
+			errorMsg += "⚠️ This is a Windows tooltip control limit error.\n\n"
+			errorMsg += "WORKAROUND: Use command-line mode instead:\n\n"
+			errorMsg += "To verify a CD/DVD drive:\n"
+			errorMsg += "  chkiso.exe E:\n\n"
+			errorMsg += "To verify an ISO file:\n"
+			errorMsg += "  chkiso.exe C:\\path\\to\\file.iso\n\n"
+			errorMsg += "To check implanted MD5:\n"
+			errorMsg += "  chkiso.exe file.iso -md5\n\n"
+			errorMsg += "For all options:\n"
+			errorMsg += "  chkiso.exe -help\n\n"
+		} else {
+			errorMsg += "This error can occur due to:\n"
+			errorMsg += "• Windows Common Controls issues\n"
+			errorMsg += "• System resource constraints\n\n"
 		}
 		
-		walk.MsgBox(nil, "Error Creating GUI", errorMsg, walk.MsgBoxIconError)
+		if logPath != "" {
+			errorMsg += fmt.Sprintf("Debug log: %s\n", logPath)
+		}
+		
+		errorMsg += "\nThe command-line interface provides all the same functionality."
+		
+		walk.MsgBox(nil, "GUI Mode Not Available", errorMsg, walk.MsgBoxIconError)
+		
+		// Also print to stderr so it's visible if run from console
+		fmt.Fprintf(os.Stderr, "\n"+errorMsg+"\n")
 		return
 	}
 	
