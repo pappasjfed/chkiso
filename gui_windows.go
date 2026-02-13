@@ -105,21 +105,23 @@ func runGUI() {
 	var verifyButton *walk.PushButton
 	
 	drives := getDriveLetters()
-	if len(drives) == 0 {
-		walk.MsgBox(nil, "Error", "No CD-ROM drives found on this system.", walk.MsgBoxIconError)
-		return
-	}
 	
 	// Get current drive if running from a drive
 	currentDrive := getCurrentDrive()
 	defaultIndex := 0
-	if currentDrive != "" {
+	if currentDrive != "" && len(drives) > 0 {
 		for i, drive := range drives {
 			if drive == currentDrive {
 				defaultIndex = i
 				break
 			}
 		}
+	}
+	
+	// If no drives found, add a placeholder message so the window still shows
+	if len(drives) == 0 {
+		drives = []string{"<No CD-ROM drives found>"}
+		defaultIndex = 0
 	}
 	
 	err := MainWindow{
@@ -145,9 +147,21 @@ func runGUI() {
 						AssignTo: &verifyButton,
 						Text:     "Verify",
 						OnClicked: func() {
-							verifyDrive(driveComboBox, resultTextEdit, verifyButton)
+							verifyDrive(driveComboBox, resultTextEdit, verifyButton, mainWindow)
 						},
 					},
+				},
+			},
+			Composite{
+				Layout: HBox{},
+				Children: []Widget{
+					PushButton{
+						Text: "Browse for ISO file...",
+						OnClicked: func() {
+							browseForISO(resultTextEdit, verifyButton, mainWindow)
+						},
+					},
+					HSpacer{},
 				},
 			},
 			TextEdit{
@@ -176,11 +190,119 @@ func runGUI() {
 		return
 	}
 	
+	// If no drives were found, show a helpful error message in the text area
+	if len(drives) == 1 && drives[0] == "<No CD-ROM drives found>" {
+		resultTextEdit.SetText("No CD-ROM drives detected on this system.\n\n" +
+			"Click 'Browse for ISO file...' to verify an ISO file from your hard drive,\n" +
+			"or:\n\n" +
+			"To verify a CD/DVD drive:\n" +
+			"  1. Insert a bootable CD/DVD into a drive\n" +
+			"  2. Or mount an ISO file using Windows Explorer (right-click → Mount)\n" +
+			"  3. Then relaunch this application\n\n" +
+			"Command-line usage is also available:\n" +
+			"  chkiso.exe path\\to\\image.iso")
+		verifyButton.SetEnabled(false)
+	}
+	
 	mainWindow.Run()
 }
 
+// browseForISO opens a file dialog to select an ISO file for verification
+func browseForISO(resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner walk.Form) {
+	dlg := new(walk.FileDialog)
+	dlg.Title = "Select ISO file to verify"
+	dlg.Filter = "ISO Files (*.iso)|*.iso|All Files (*.*)|*.*"
+	
+	accepted, err := dlg.ShowOpen(owner)
+	if err != nil {
+		resultText.SetText(fmt.Sprintf("Error opening file dialog: %v", err))
+		return
+	}
+	
+	if !accepted {
+		// User cancelled
+		return
+	}
+	
+	isoPath := dlg.FilePath
+	if isoPath == "" {
+		return
+	}
+	
+	// Disable button during verification
+	verifyBtn.SetEnabled(false)
+	
+	resultText.SetText(fmt.Sprintf("Verifying ISO file: %s\n\nPlease wait, this may take a few minutes...\n\n", isoPath))
+	
+	// Run verification in a goroutine
+	go func() {
+		defer func() {
+			verifyBtn.Synchronize(func() {
+				verifyBtn.SetEnabled(true)
+			})
+		}()
+		
+		// Create config for the ISO file
+		config := &Config{
+			Path:     isoPath,
+			NoVerify: false,
+			MD5Check: false,
+		}
+		
+		// Validate path
+		if err := validatePath(config); err != nil {
+			resultText.Synchronize(func() {
+				resultText.AppendText(fmt.Sprintf("Error: %v\n", err))
+			})
+			return
+		}
+		
+		output := &strings.Builder{}
+		output.WriteString(fmt.Sprintf("=== Verifying ISO File ===\n"))
+		output.WriteString(fmt.Sprintf("File: %s\n\n", filepath.Base(isoPath)))
+		
+		// Display SHA256 Hash
+		output.WriteString("--- SHA256 Hash ---\n")
+		calculatedHash, err := getSha256FromPath(config)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Error calculating hash: %v\n", err))
+		} else {
+			output.WriteString(fmt.Sprintf("SHA256: %s\n", strings.ToLower(calculatedHash)))
+		}
+		output.WriteString("\n")
+		
+		// Try MD5 check
+		output.WriteString("--- Checking for Implanted MD5 ---\n")
+		md5Result, err := checkImplantedMD5(config)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Error: %v\n", err))
+		} else if md5Result == nil {
+			output.WriteString("No implanted MD5 signature found.\n")
+		} else {
+			output.WriteString(fmt.Sprintf("Verification Method: %s\n", md5Result.VerificationMethod))
+			output.WriteString(fmt.Sprintf("Stored MD5:          %s\n", md5Result.StoredMD5))
+			output.WriteString(fmt.Sprintf("Calculated MD5:      %s\n", md5Result.CalculatedMD5))
+			if md5Result.IsIntegrityOK {
+				output.WriteString("Result: SUCCESS - Implanted MD5 is valid.\n")
+			} else {
+				output.WriteString("Result: FAILURE - Implanted MD5 does not match.\n")
+			}
+		}
+		output.WriteString("\n")
+		
+		output.WriteString("--- Summary ---\n")
+		output.WriteString("ISO file verification complete.\n")
+		output.WriteString("\nNote: Content verification requires the ISO to be mounted.\n")
+		output.WriteString("To verify file contents, mount the ISO and select the drive from the dropdown.")
+		
+		resultText.Synchronize(func() {
+			resultText.SetText(output.String())
+		})
+	}()
+}
+
 // verifyDrive performs the verification for the selected drive
-func verifyDrive(driveCombo *walk.ComboBox, resultText *walk.TextEdit, verifyBtn *walk.PushButton) {
+func verifyDrive(driveCombo *walk.ComboBox, resultText *walk.TextEdit, verifyBtn *walk.PushButton, owner walk.Form) {
 	// Get selected drive
 	selectedIndex := driveCombo.CurrentIndex()
 	if selectedIndex < 0 {
@@ -196,6 +318,13 @@ func verifyDrive(driveCombo *walk.ComboBox, resultText *walk.TextEdit, verifyBtn
 	}
 	
 	selectedDrive := drives[selectedIndex]
+	
+	// Check if this is the placeholder message for no drives
+	if selectedDrive == "<No CD-ROM drives found>" {
+		resultText.SetText("Error: No CD-ROM drives available to verify.\n\n" +
+			"Please insert a CD/DVD or mount an ISO, then relaunch the application.")
+		return
+	}
 	
 	// Disable button during verification
 	verifyBtn.SetEnabled(false)
