@@ -10,11 +10,39 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 - ✅ **Cross-platform**: Works on Windows, Linux, macOS, and FreeBSD
 - ✅ **No FIPS restrictions**: MD5 hashing works everywhere (no policy blocks)
 - ✅ **Single executable**: Statically-linked binary with no dependencies
+- ✅ **GUI Mode (Windows)**: Easy-to-use graphical interface for non-technical users
 - ✅ **Multiple verification methods**:
   - SHA256 hash verification
   - MD5 implanted hash check (checkisomd5 compatible)
   - External hash file verification
   - Content verification against embedded checksums
+
+## GUI Mode (Windows)
+
+**New!** chkiso now includes a graphical user interface for Windows users. Perfect for non-technical users who want to verify optical media without using the command line.
+
+### How to Use the GUI
+
+1. **Double-click** the `chkiso-windows-amd64.exe` file (or run it without any command-line arguments)
+2. A window will appear showing:
+   - A dropdown list of all CD-ROM/DVD drives on your system
+   - A "Verify" button to start the verification
+   - A results area showing the verification progress and results
+   - A "Close" button to exit the application
+3. **Select** the drive you want to verify from the dropdown
+   - If you run chkiso from a CD/DVD drive, that drive will be pre-selected
+4. Click **"Verify"** to start the verification process
+5. Wait for the verification to complete (this may take several minutes)
+6. Review the results in the text area
+7. Click **"Close"** when finished
+
+### GUI vs Command Line
+
+The program automatically detects how it's being run:
+- **GUI Mode**: When double-clicked from File Explorer (no console attached)
+- **Command-Line Mode**: When run from PowerShell, Command Prompt, or with arguments
+
+This means you can use the same executable for both GUI and command-line operations!
 
 ## Installation
 

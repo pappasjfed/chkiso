@@ -199,91 +199,104 @@ func verifyDrive(driveCombo *walk.ComboBox, resultText *walk.TextEdit, verifyBtn
 	
 	// Disable button during verification
 	verifyBtn.SetEnabled(false)
-	defer verifyBtn.SetEnabled(true)
 	
 	resultText.SetText(fmt.Sprintf("Verifying drive %s...\n\nPlease wait, this may take a few minutes...\n\n", selectedDrive))
 	
-	// Create a config for the verification
-	config := &Config{
-		Path:     selectedDrive,
-		NoVerify: false,
-		MD5Check: false,
-	}
-	
-	// Validate path
-	if err := validatePath(config); err != nil {
-		resultText.AppendText(fmt.Sprintf("Error: %v\n", err))
-		return
-	}
-	
-	// Capture output
-	output := &strings.Builder{}
-	
-	// Run verification (we'll capture the output)
-	output.WriteString(fmt.Sprintf("=== Verifying Drive %s ===\n\n", selectedDrive))
-	
-	// Display SHA256 Hash
-	output.WriteString("--- SHA256 Hash (Informational) ---\n")
-	calculatedHash, err := getSha256FromPath(config)
-	if err != nil {
-		output.WriteString(fmt.Sprintf("Error calculating hash: %v\n", err))
-	} else {
-		output.WriteString(fmt.Sprintf("SHA256: %s\n", strings.ToLower(calculatedHash)))
-	}
-	output.WriteString("\n")
-	
-	// Verify contents
-	output.WriteString("--- Verifying Contents ---\n")
-	mountPath := fmt.Sprintf("%s\\", selectedDrive)
-	output.WriteString(fmt.Sprintf("Verifying contents of physical drive at: %s\n", mountPath))
-	output.WriteString(fmt.Sprintf("Searching for checksum files (*.sha, sha256sum.txt, SHA256SUMS) in %s...\n", mountPath))
-	
-	// Find checksum files
-	checksumFiles, err := findChecksumFiles(mountPath)
-	if err != nil {
-		output.WriteString(fmt.Sprintf("Warning: Error finding checksum files: %v\n", err))
-	} else if len(checksumFiles) == 0 {
-		output.WriteString("Warning: Could not find any checksum files (*.sha, sha256sum.txt, SHA256SUMS) on the media.\n")
-	} else {
-		output.WriteString(fmt.Sprintf("\nFound %d checksum file(s):\n", len(checksumFiles)))
-		for i, cf := range checksumFiles {
-			relPath, err := filepath.Rel(mountPath, cf)
-			if err != nil {
-				relPath = cf
-			}
-			output.WriteString(fmt.Sprintf("  %d. %s\n", i+1, relPath))
+	// Run verification in a goroutine to prevent UI freezing
+	go func() {
+		defer func() {
+			// Re-enable button when done
+			verifyBtn.Synchronize(func() {
+				verifyBtn.SetEnabled(true)
+			})
+		}()
+		
+		// Create a config for the verification
+		config := &Config{
+			Path:     selectedDrive,
+			NoVerify: false,
+			MD5Check: false,
+		}
+		
+		// Validate path
+		if err := validatePath(config); err != nil {
+			resultText.Synchronize(func() {
+				resultText.AppendText(fmt.Sprintf("Error: %v\n", err))
+			})
+			return
+		}
+		
+		// Capture output
+		output := &strings.Builder{}
+		
+		// Run verification (we'll capture the output)
+		output.WriteString(fmt.Sprintf("=== Verifying Drive %s ===\n\n", selectedDrive))
+		
+		// Display SHA256 Hash
+		output.WriteString("--- SHA256 Hash (Informational) ---\n")
+		calculatedHash, err := getSha256FromPath(config)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Error calculating hash: %v\n", err))
+		} else {
+			output.WriteString(fmt.Sprintf("SHA256: %s\n", strings.ToLower(calculatedHash)))
 		}
 		output.WriteString("\n")
 		
-		totalFiles := 0
-		failedFiles := 0
+		// Verify contents
+		output.WriteString("--- Verifying Contents ---\n")
+		mountPath := fmt.Sprintf("%s\\", selectedDrive)
+		output.WriteString(fmt.Sprintf("Verifying contents of physical drive at: %s\n", mountPath))
+		output.WriteString(fmt.Sprintf("Searching for checksum files (*.sha, sha256sum.txt, SHA256SUMS) in %s...\n", mountPath))
 		
-		for _, checksumFile := range checksumFiles {
-			output.WriteString(fmt.Sprintf("Processing checksum file: %s\n", filepath.Base(checksumFile)))
-			baseDir := filepath.Dir(checksumFile)
-			
-			// Process checksum file
-			files, failed := processChecksumFile(checksumFile, baseDir, output)
-			totalFiles += files
-			failedFiles += failed
-			output.WriteString("\n")
-		}
-		
-		output.WriteString("--- Verification Summary ---\n")
-		output.WriteString(fmt.Sprintf("Checksum files processed: %d\n", len(checksumFiles)))
-		output.WriteString(fmt.Sprintf("Total files verified: %d\n", totalFiles))
-		
-		if failedFiles == 0 && totalFiles > 0 {
-			output.WriteString(fmt.Sprintf("Success: All %d files verified successfully.\n", totalFiles))
-		} else if totalFiles == 0 {
-			output.WriteString("No files were verified.\n")
+		// Find checksum files
+		checksumFiles, err := findChecksumFiles(mountPath)
+		if err != nil {
+			output.WriteString(fmt.Sprintf("Warning: Error finding checksum files: %v\n", err))
+		} else if len(checksumFiles) == 0 {
+			output.WriteString("Warning: Could not find any checksum files (*.sha, sha256sum.txt, SHA256SUMS) on the media.\n")
 		} else {
-			output.WriteString(fmt.Sprintf("Failure: %d out of %d files failed verification.\n", failedFiles, totalFiles))
+			output.WriteString(fmt.Sprintf("\nFound %d checksum file(s):\n", len(checksumFiles)))
+			for i, cf := range checksumFiles {
+				relPath, err := filepath.Rel(mountPath, cf)
+				if err != nil {
+					relPath = cf
+				}
+				output.WriteString(fmt.Sprintf("  %d. %s\n", i+1, relPath))
+			}
+			output.WriteString("\n")
+			
+			totalFiles := 0
+			failedFiles := 0
+			
+			for _, checksumFile := range checksumFiles {
+				output.WriteString(fmt.Sprintf("Processing checksum file: %s\n", filepath.Base(checksumFile)))
+				baseDir := filepath.Dir(checksumFile)
+				
+				// Process checksum file
+				files, failed := processChecksumFile(checksumFile, baseDir, output)
+				totalFiles += files
+				failedFiles += failed
+				output.WriteString("\n")
+			}
+			
+			output.WriteString("--- Verification Summary ---\n")
+			output.WriteString(fmt.Sprintf("Checksum files processed: %d\n", len(checksumFiles)))
+			output.WriteString(fmt.Sprintf("Total files verified: %d\n", totalFiles))
+			
+			if failedFiles == 0 && totalFiles > 0 {
+				output.WriteString(fmt.Sprintf("Success: All %d files verified successfully.\n", totalFiles))
+			} else if totalFiles == 0 {
+				output.WriteString("No files were verified.\n")
+			} else {
+				output.WriteString(fmt.Sprintf("Failure: %d out of %d files failed verification.\n", failedFiles, totalFiles))
+			}
 		}
-	}
-	
-	// Update the result text
-	resultText.SetText(output.String())
+		
+		// Update the result text
+		resultText.Synchronize(func() {
+			resultText.SetText(output.String())
+		})
+	}()
 }
 
 // processChecksumFile processes a single checksum file and returns (totalFiles, failedFiles)
