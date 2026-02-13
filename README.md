@@ -21,11 +21,14 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 
 **New!** chkiso now includes a graphical user interface for Windows users. Perfect for non-technical users who want to verify optical media without using the command line.
 
+**⚠️ Important**: GUI mode may not work on all Windows systems due to Windows tooltip control limits. If the GUI fails to launch, the program will show clear instructions for using the command-line interface, which provides all the same functionality.
+
 ### How to Use the GUI
 
 1. **Launch the GUI:**
    - **Double-click** the `chkiso-windows-amd64.exe` file (automatically launches GUI)
    - **OR** run from command line: `chkiso.exe -gui` (explicitly launch GUI mode)
+   - **If GUI fails**: Follow the on-screen instructions to use CLI mode instead
 2. A window will appear with controls arranged vertically:
    - A "Select Drive:" label
    - A dropdown list of all CD-ROM/DVD drives on your system
@@ -44,12 +47,11 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
    - **Option 1**: Click "Browse for ISO file..." and select the ISO
    - **Option 2**: Use command-line mode (see below)
    - The MD5 checkbox (if available) applies to ISO verification too
-   - **Note**: Drag-and-drop temporarily disabled to prevent Windows tooltip errors
 5. Wait for the verification to complete (this may take several minutes)
 6. Review the results in the text area
 7. Click "Close" when finished
 
-**Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message. You can use the browse button or drag-and-drop to verify ISO files.
+**Note**: If no CD-ROM drives are detected, the GUI will still open with a helpful message. You can use the browse button to verify ISO files.
 
 ### MD5 Verification in GUI
 
@@ -82,16 +84,27 @@ If you encounter errors when launching the GUI:
    - Check this file for detailed error information
 
 2. **Common Issues**:
-   - **TTM_ADDTOOL errors**: ~~Usually related to Windows tooltip controls~~ **FIXED in v2.0.0** - Uses Dialog instead of MainWindow to avoid FormBase tooltip issues
+   - **TTM_ADDTOOL errors**: This is a Windows tooltip control limit error
+     - **Not fully fixable**: The walk GUI library is incompatible with some Windows configurations
+     - **Workaround**: Use command-line interface (CLI) mode instead - it has all the same features
+     - The error dialog will show CLI usage instructions
    - **Window creation failures**: May be due to system resource constraints
    - The error dialog will show the log file location
    
    **Technical Notes**: 
-   - GUI uses Dialog window instead of MainWindow (simpler internal structure)
-   - Tooltips are disabled on all widgets to prevent Windows API limits
-   - Drag-and-drop temporarily disabled (use Browse button instead)
+   - GUI uses Dialog window with tooltips disabled to minimize Windows API calls
+   - Drag-and-drop disabled to reduce complexity
+   - CLI mode always works and provides identical functionality
 
-3. **What to do**:
+3. **If GUI Doesn't Work**:
+   - The error message will provide clear CLI instructions
+   - All GUI features are available in CLI mode:
+     - Drive verification: `chkiso.exe E:\`
+     - ISO verification: `chkiso.exe path\to\file.iso`
+     - MD5 checking: `chkiso.exe file.iso -md5`
+   - See Command-Line Usage section below for full details
+
+4. **For Developers/Issues**:
    - Check the debug log file for details
    - Include the log file when reporting issues
    - Try running as administrator if permissions are an issue
