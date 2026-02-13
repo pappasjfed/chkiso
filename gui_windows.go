@@ -172,38 +172,35 @@ func runGUI() {
 	logDebug("checkisomd5.exe available: %v", md5Available)
 	
 	// Build the children widgets dynamically
+	// Note: Keep widget structure flat to avoid TTM_ADDTOOL errors
 	var children []Widget
 	
-	// Add drive selection row
-	children = append(children, Composite{
-		Layout: Grid{Columns: 3},
-		Children: []Widget{
-			Label{
-				Text: "Select Drive:",
-			},
-			ComboBox{
-				AssignTo:      &driveComboBox,
-				Model:         drives,
-				CurrentIndex:  defaultIndex,
-				MinSize:       Size{Width: 100},
-			},
-			PushButton{
-				AssignTo: &verifyButton,
-				Text:     "Verify",
-				OnClicked: func() {
-					md5Check := false
-					if md5CheckBox != nil {
-						md5Check = md5CheckBox.Checked()
-					}
-					verifyDriveWithOptions(driveComboBox, resultTextEdit, verifyButton, mainWindow, md5Check)
-				},
-			},
+	// Add drive selection controls directly without nested composite
+	children = append(children, Label{
+		Text: "Select Drive:",
+	})
+	
+	children = append(children, ComboBox{
+		AssignTo:     &driveComboBox,
+		Model:        drives,
+		CurrentIndex: defaultIndex,
+		MinSize:      Size{Width: 100},
+	})
+	
+	children = append(children, PushButton{
+		AssignTo: &verifyButton,
+		Text:     "Verify",
+		OnClicked: func() {
+			md5Check := false
+			if md5CheckBox != nil {
+				md5Check = md5CheckBox.Checked()
+			}
+			verifyDriveWithOptions(driveComboBox, resultTextEdit, verifyButton, mainWindow, md5Check)
 		},
 	})
 	
-	// Add browse button and MD5 checkbox row
-	var browseRowChildren []Widget
-	browseRowChildren = append(browseRowChildren, PushButton{
+	// Add browse button
+	children = append(children, PushButton{
 		Text: "Browse for ISO file...",
 		OnClicked: func() {
 			md5Check := false
@@ -216,18 +213,11 @@ func runGUI() {
 	
 	// Add MD5 checkbox if checkisomd5.exe is available
 	if md5Available {
-		browseRowChildren = append(browseRowChildren, CheckBox{
+		children = append(children, CheckBox{
 			AssignTo: &md5CheckBox,
 			Text:     "Verify implanted MD5 (checkisomd5)",
 		})
 	}
-	
-	browseRowChildren = append(browseRowChildren, HSpacer{})
-	
-	children = append(children, Composite{
-		Layout: HBox{},
-		Children: browseRowChildren,
-	})
 	
 	// Add text area
 	children = append(children, TextEdit{
@@ -238,16 +228,10 @@ func runGUI() {
 	})
 	
 	// Add close button
-	children = append(children, Composite{
-		Layout: HBox{},
-		Children: []Widget{
-			HSpacer{},
-			PushButton{
-				Text: "Close",
-				OnClicked: func() {
-					mainWindow.Close()
-				},
-			},
+	children = append(children, PushButton{
+		Text: "Close",
+		OnClicked: func() {
+			mainWindow.Close()
 		},
 	})
 	
