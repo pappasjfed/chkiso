@@ -1,12 +1,20 @@
 # GUI Testing Guide
 
-This document provides instructions for testing the new GUI mode on Windows.
+This document provides instructions for testing the GUI mode on Windows.
+
+## ⚠️ Important Note
+
+**GUI mode may not work on all Windows systems** due to Windows tooltip control limits in the walk library. If you encounter a "TTM_ADDTOOL failed" error:
+- This is a known limitation of the walk GUI library
+- The error dialog will provide clear instructions to use CLI mode instead
+- CLI mode has all the same features as GUI mode
+- See the main README for CLI usage examples
 
 ## Testing the GUI Mode
 
 ### Prerequisites
 - Windows 10 or Windows 11
-- A CD/DVD drive with bootable media (e.g., Linux installation disc)
+- A CD/DVD drive with bootable media (e.g., Linux installation disc) (optional)
 - The `chkiso-windows-amd64.exe` binary
 
 ### Test Cases
@@ -14,7 +22,10 @@ This document provides instructions for testing the new GUI mode on Windows.
 #### Test 1: Launch GUI from File Explorer
 1. Navigate to the directory containing `chkiso-windows-amd64.exe` in File Explorer
 2. **Double-click** the executable
-3. **Expected Result**: A GUI window should appear with vertical layout:
+3. **Possible Results**:
+   - **Success**: A GUI window appears (see below for layout)
+   - **Failure**: Error dialog appears with "TTM_ADDTOOL failed" and CLI instructions - this is a known limitation
+4. **If GUI opens successfully**, it should show:
    - Title: "chkiso - ISO/Drive Verification Tool v2.0.0"
    - A "Select Drive:" label at the top
    - A dropdown menu listing all CD-ROM/DVD drives (or "<No CD-ROM drives found>" if none present)
@@ -220,18 +231,26 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 - Check Windows Event Viewer for any error messages
 - Try launching with `-gui` flag from command line to see error messages
 
-### GUI creation errors (e.g., TTM_ADDTOOL failed) - FIXED
-- **Status**: **FIXED in v2.0.0** - Uses Dialog instead of MainWindow
-- **Previous issue**: MainWindow's FormBase created tooltip controls exceeding Windows limits
-- **Solution**: 
-  - Replaced MainWindow with Dialog (simpler internal structure)
+### GUI creation errors (e.g., TTM_ADDTOOL failed) - KNOWN LIMITATION
+- **Status**: **Not fully fixable** - This is a walk library limitation
+- **Issue**: Some Windows systems hit tooltip control limits when creating GUI
+- **What we tried**:
+  - Replaced MainWindow with Dialog (simpler structure)
   - Disabled tooltips on all widgets (`ToolTipText: ""`)
-  - Removed OnDropFiles to reduce complexity
-- **Result**: Dialog avoids FormBase composite and tooltip control creation
-- If you still encounter this error:
-  - **Check the debug log**: The error dialog will show the log file path
-  - Try running as administrator
-  - Report with debug log file
+  - Removed OnDropFiles and drag-drop features
+  - Flattened widget hierarchy
+- **Result**: Improved but not guaranteed to work on all systems
+- **If you encounter this error**:
+  - This is expected on some Windows configurations
+  - The error dialog will provide clear CLI usage instructions
+  - **Use CLI mode instead** - it has all the same features:
+    ```
+    chkiso.exe E:\           # Verify drive
+    chkiso.exe file.iso      # Verify ISO
+    chkiso.exe file.iso -md5 # With MD5 check
+    ```
+  - Check the debug log for technical details
+  - No need to report - this is a known library limitation
 
 ### GUI freezes during verification
 - This should not happen as verification runs asynchronously
