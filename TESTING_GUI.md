@@ -221,10 +221,13 @@ All methods provide the same comprehensive verification (SHA256 + MD5 + file con
 - Try launching with `-gui` flag from command line to see error messages
 
 ### GUI creation errors (e.g., TTM_ADDTOOL failed) - FIXED
-- **Status**: **FIXED in v2.0.0** - Tooltips explicitly disabled on all widgets
-- **Previous issue**: Windows tooltip control limits exceeded even with flat structure
-- **Solution**: Added `ToolTipText: ""` to all widgets to prevent tooltip creation
-- **Tradeoff**: No tooltips appear on hover, but GUI is fully functional
+- **Status**: **FIXED in v2.0.0** - Uses Dialog instead of MainWindow
+- **Previous issue**: MainWindow's FormBase created tooltip controls exceeding Windows limits
+- **Solution**: 
+  - Replaced MainWindow with Dialog (simpler internal structure)
+  - Disabled tooltips on all widgets (`ToolTipText: ""`)
+  - Removed OnDropFiles to reduce complexity
+- **Result**: Dialog avoids FormBase composite and tooltip control creation
 - If you still encounter this error:
   - **Check the debug log**: The error dialog will show the log file path
   - Try running as administrator
