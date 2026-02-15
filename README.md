@@ -31,14 +31,16 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 ### How to Use the GUI
 
 **Latest Improvements (v2.0.0)**:
-- 🎨 Custom gold CD icon
+- 🎨 Custom gold CD icon (runtime and optionally for EXE)
 - 📐 Larger window (800x600) with better layout
-- 🔠 Monospace font for clearer output
+- 🔠 Bold monospace font for clearer output
 - 📊 Progress indicators during verification
 - 🔒 Prevents concurrent operations
-- 📝 More verbose MD5 verification output
+- 📝 More verbose output (especially with checkisomd5.exe)
 - 🐛 Fixed double-click detection from Explorer
 - 🎯 Close button moved to bottom for better UX
+- 📄 Debug log path shown in app (no second window)
+- ✅ checkisomd5.exe checkbox actually runs the tool with -v flag
 
 1. **Launch the GUI:**
    - **Windows AMD64**: Double-click `chkiso-windows-amd64.exe` (automatically launches GUI if no arguments)
@@ -94,9 +96,9 @@ chkiso.exe -gui
 If you encounter errors when launching the GUI:
 
 1. **Debug Logging**: GUI mode automatically creates a debug log file in your temp directory
-   - Location: `%TEMP%\chkiso-debug-YYYYMMDD-HHMMSS.log`
-   - The log path is shown when you launch the program
+   - Location shown at top of results area: `Debug log: C:\...\chkiso-debug-....log`
    - Check this file for detailed error information
+   - No annoying second window!
 
 2. **Common Issues**:
    - **Display issues**: Fyne requires OpenGL support
