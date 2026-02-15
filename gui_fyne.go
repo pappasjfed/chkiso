@@ -79,7 +79,13 @@ func runGUI() {
 	resultText.Wrapping = fyne.TextWrapWord
 	resultText.Disable() // Read-only
 	// Use monospace font for better output formatting
-	resultText.TextStyle = fyne.TextStyle{Monospace: true}
+	resultText.TextStyle = fyne.TextStyle{Monospace: true, Bold: true}
+	
+	// Set initial message with log path
+	logPathMsg := ""
+	if debugLogPath != "" {
+		logPathMsg = fmt.Sprintf("Debug log: %s\n\n", debugLogPath)
+	}
 	
 	var md5Check *widget.Check
 	if md5Available {
@@ -189,7 +195,8 @@ func runGUI() {
 	// Set initial message
 	if len(drives) == 1 && drives[0] == "<No CD-ROM drives found>" {
 		logDebug("Setting initial message for no drives found")
-		resultText.SetText("No CD-ROM drives detected on this system.\n\n" +
+		resultText.SetText(logPathMsg +
+			"No CD-ROM drives detected on this system.\n\n" +
 			"To verify an ISO file:\n" +
 			"  • Click 'Browse for ISO file...' button below\n\n" +
 			"To verify a CD/DVD drive:\n" +
@@ -201,7 +208,8 @@ func runGUI() {
 		verifyBtn.Disable()
 	} else {
 		logDebug("Setting initial ready message")
-		resultText.SetText("Ready to verify.\n\n" +
+		resultText.SetText(logPathMsg +
+			"Ready to verify.\n\n" +
 			"Select a drive from the dropdown and click 'Verify Drive',\n" +
 			"or click 'Browse for ISO file...'.")
 	}
@@ -227,7 +235,7 @@ func runGUI() {
 		),
 		// Left, Right: nil
 		nil, nil,
-		// Center: results (takes remaining space)
+		// Center: results with scroll (takes remaining space)
 		container.NewScroll(resultText),
 	)
 	

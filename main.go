@@ -28,9 +28,10 @@ const (
 )
 
 var (
-	hasErrors = false
-	debugLog  *log.Logger
-	logFile   *os.File
+	hasErrors    = false
+	debugLog     *log.Logger
+	logFile      *os.File
+	debugLogPath string // Store log path for GUI display
 )
 
 // initLogger initializes the debug logger to a file in temp directory
@@ -51,8 +52,8 @@ func initLogger() {
 	debugLog.Printf("Platform: %s/%s", runtime.GOOS, runtime.GOARCH)
 	debugLog.Printf("Log file: %s", logPath)
 	
-	// Also print to stderr so user knows where log is
-	fmt.Fprintf(os.Stderr, "Debug log: %s\n", logPath)
+	// Store log path globally so GUI can display it
+	debugLogPath = logPath
 }
 
 // logDebug logs a debug message if logger is initialized
