@@ -140,7 +140,18 @@ func runCheckisomd5(config *Config) error {
 	}
 	
 	// Run checkisomd5.exe with -v (verbose) flag
-	cmd := exec.Command(checkisoPath, "-v", config.Path)
+	// Convert drive path to device format (\\.\X:) for raw device access
+	targetPath := config.Path
+	// Check if this is a drive path (like "G:" or "G:\")
+	if len(targetPath) >= 2 && targetPath[1] == ':' {
+		// Extract drive letter and convert to device path
+		driveLetter := targetPath[0:1]
+		targetPath = fmt.Sprintf("\\\\.\\%s:", driveLetter)
+		if config.GuiMode {
+			fmt.Printf("Using device path for drive access: %s\n", targetPath)
+		}
+	}
+	cmd := exec.Command(checkisoPath, "-v", targetPath)
 	
 	// Capture combined output
 	output, err := cmd.CombinedOutput()

@@ -169,7 +169,7 @@ jobs:
           CGO_ENABLED: 1
           CC: ${{ matrix.cc }}
         run: |
-          go build -ldflags="-s -w" -trimpath -o ${{ matrix.output }}
+          go build -ldflags="-s -w -H windowsgui" -trimpath -o ${{ matrix.output }}
           sha256sum ${{ matrix.output }} > ${{ matrix.output }}.sha256
           echo "Built ${{ matrix.output }} (with CGO)"
           ls -lh ${{ matrix.output }}

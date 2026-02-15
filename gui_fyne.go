@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
@@ -81,6 +83,16 @@ func runGUI() {
 	// Use monospace font for better output formatting
 	resultText.TextStyle = fyne.TextStyle{Monospace: true, Bold: true}
 	
+	// Create a white text widget for high contrast
+	// We'll wrap the resultText in a container with white text color
+	resultTextRich := canvas.NewText("", color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+	resultTextRich.TextStyle = fyne.TextStyle{Monospace: true}
+	resultTextRich.TextSize = 12
+	
+	// Create progress bar for visual feedback during operations
+	progressBar := widget.NewProgressBar()
+	progressBar.Hide() // Hidden initially, shown during operations
+	
 	// Set initial message with log path
 	logPathMsg := ""
 	if debugLogPath != "" {
@@ -113,6 +125,12 @@ func runGUI() {
 		browseBtn.Disable()
 		resultText.SetText("Starting verification...\n")
 		
+		// Show progress bar
+		fyne.Do(func() {
+			progressBar.SetValue(0)
+			progressBar.Show()
+		})
+		
 		go func() {
 			// Check if drive is ready
 			if !isDriveReady(selectedDrive) {
@@ -123,22 +141,28 @@ func runGUI() {
 						"  • Use 'Browse for ISO file...' button\n", selectedDrive))
 					verifyBtn.Enable()
 					browseBtn.Enable()
+					progressBar.Hide()
 				})
 				return
 			}
 			
-			// Show progress
+			// Show progress - Step 1
 			fyne.Do(func() {
+				progressBar.SetValue(0.1)
 				resultText.SetText(fmt.Sprintf("Verifying drive %s...\n\nStep 1/3: Reading ISO structure...\n", selectedDrive))
 			})
 			
 			// Perform verification
 			output := captureVerificationOutput(selectedDrive, md5CheckEnabled)
 			
+			// Complete
 			fyne.Do(func() {
+				progressBar.SetValue(1.0)
 				resultText.SetText(output)
 				verifyBtn.Enable()
 				browseBtn.Enable()
+				// Hide progress bar after a moment
+				progressBar.Hide()
 			})
 		}()
 	})
@@ -173,12 +197,20 @@ func runGUI() {
 			browseBtn.Disable()
 			resultText.SetText(fmt.Sprintf("Verifying: %s\n\nStep 1/3: Reading ISO structure...\n", filepath.Base(filePath)))
 			
+			// Show progress bar
+			fyne.Do(func() {
+				progressBar.SetValue(0.1)
+				progressBar.Show()
+			})
+			
 			go func() {
 				output := captureVerificationOutput(filePath, md5CheckEnabled)
 				fyne.Do(func() {
+					progressBar.SetValue(1.0)
 					resultText.SetText(output)
 					verifyBtn.Enable()
 					browseBtn.Enable()
+					progressBar.Hide()
 				})
 			}()
 		}, myWindow)
@@ -227,6 +259,7 @@ func runGUI() {
 				}
 				return widget.NewLabel("") // Empty placeholder
 			}(),
+			progressBar, // Add progress bar to top section
 		),
 		// Bottom: close button
 		container.NewVBox(
