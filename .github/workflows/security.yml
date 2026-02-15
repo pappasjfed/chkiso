@@ -50,7 +50,17 @@ jobs:
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
+          # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate
+          # Allow packages with OpenSSF Scorecard score >= 2
+          # The Fyne GUI framework includes SVG rendering libraries (srwiley/oksvg, srwiley/rasterx)
+          # with scores of 2 and 2.5. These are accepted because:
+          # - They're transitive dependencies of Fyne (score: 6.1), not direct dependencies
+          # - SVG rendering is not a critical security path in our ISO verification tool
+          # - No known vulnerabilities exist in these packages
+          # - Widely used and trusted in the Fyne ecosystem
+          # Setting to 2 allows these while still catching truly problematic dependencies
+          fail-on-scorecard: 2
 
   secret-scan:
     name: Secret Scanning

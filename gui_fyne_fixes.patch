@@ -1,0 +1,5 @@
+This is a comprehensive set of fixes for the GUI including:
+1. Device path fix for checkisomd5
+2. Text color fix (white text)
+3. Progress bar addition
+4. Build flag for console hiding

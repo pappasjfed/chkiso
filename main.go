@@ -7,12 +7,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const (
@@ -26,8 +28,48 @@ const (
 )
 
 var (
-	hasErrors = false
+	hasErrors    = false
+	debugLog     *log.Logger
+	logFile      *os.File
+	debugLogPath string // Store log path for GUI display
 )
+
+// initLogger initializes the debug logger to a file in temp directory
+func initLogger() {
+	// Create log file in temp directory
+	tempDir := os.TempDir()
+	logPath := filepath.Join(tempDir, fmt.Sprintf("chkiso-debug-%s.log", time.Now().Format("20060102-150405")))
+	
+	var err error
+	logFile, err = os.Create(logPath)
+	if err != nil {
+		// If we can't create log file, just continue without logging
+		return
+	}
+	
+	debugLog = log.New(logFile, "", log.LstdFlags|log.Lshortfile)
+	debugLog.Printf("chkiso version %s starting", VERSION)
+	debugLog.Printf("Platform: %s/%s", runtime.GOOS, runtime.GOARCH)
+	debugLog.Printf("Log file: %s", logPath)
+	
+	// Store log path globally so GUI can display it
+	debugLogPath = logPath
+}
+
+// logDebug logs a debug message if logger is initialized
+func logDebug(format string, args ...interface{}) {
+	if debugLog != nil {
+		debugLog.Printf(format, args...)
+	}
+}
+
+// closeLogger closes the log file
+func closeLogger() {
+	if logFile != nil {
+		logDebug("Closing log file")
+		logFile.Close()
+	}
+}
 
 type Config struct {
 	Path               string
@@ -36,6 +78,7 @@ type Config struct {
 	NoVerify           bool
 	MD5Check           bool
 	Dismount           bool
+	GuiMode            bool   // Explicitly request GUI mode
 	isDrive            bool
 	driveLetter        string
 	mountedISO         bool   // Track if we mounted the ISO (vs user-mounted)
@@ -43,6 +86,46 @@ type Config struct {
 }
 
 func main() {
+	// Check for explicit GUI flag first (before any other processing)
+	// This allows users to force GUI mode from command line
+	for _, arg := range os.Args[1:] {
+		if arg == "-gui" || arg == "--gui" {
+			if runtime.GOOS == "windows" {
+				// Initialize logging for GUI mode
+				initLogger()
+				defer closeLogger()
+				
+				logDebug("GUI mode requested via -gui flag")
+				logDebug("Command line args: %v", os.Args)
+				
+				runGUI()
+				return
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: GUI mode is only supported on Windows\n")
+				os.Exit(1)
+			}
+		}
+	}
+	
+	// Check if we should run in GUI mode (Windows only)
+	// GUI mode is triggered when:
+	// 1. Running on Windows
+	// 2. No command-line arguments provided (or only the executable name)
+	// When double-clicked from Explorer, Windows may create a console briefly,
+	// so we default to GUI mode whenever no arguments are provided on Windows.
+	if runtime.GOOS == "windows" && len(os.Args) == 1 {
+		// Initialize logging for GUI mode
+		initLogger()
+		defer closeLogger()
+		
+		logDebug("GUI mode auto-detected (no args on Windows)")
+		logDebug("hasConsole(): %v", hasConsole())
+		
+		runGUI()
+		return
+	}
+	
+	// CLI mode - we have arguments
 	config := parseFlags()
 	
 	// Validate and resolve the path
@@ -123,6 +206,9 @@ func parseFlags() *Config {
 		case arg == "-dismount" || arg == "--dismount" || arg == "-eject" || arg == "--eject":
 			config.Dismount = true
 			i++
+		case arg == "-gui" || arg == "--gui":
+			config.GuiMode = true
+			i++
 		default:
 			// Positional argument
 			args = append(args, arg)
@@ -161,6 +247,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  -md5                Enable implanted MD5 check\n")
 	fmt.Fprintf(os.Stderr, "  -dismount           Dismount/eject after verification\n")
 	fmt.Fprintf(os.Stderr, "  -eject              Alias for -dismount\n")
+	fmt.Fprintf(os.Stderr, "  -gui                Launch GUI mode (Windows only)\n")
 	fmt.Fprintf(os.Stderr, "  -version            Display version information\n")
 	fmt.Fprintf(os.Stderr, "  -help               Display this help information\n")
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
@@ -170,6 +257,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  chkiso -shafile hashes.sha image.iso\n")
 	fmt.Fprintf(os.Stderr, "  chkiso -md5 image.iso\n")
 	fmt.Fprintf(os.Stderr, "  chkiso -noverify E:\n")
+	fmt.Fprintf(os.Stderr, "  chkiso -gui         (Windows: Launch GUI mode)\n")
 }
 
 func validatePath(config *Config) error {
@@ -531,6 +619,25 @@ func findChecksumFiles(rootPath string) ([]string, error) {
 func verifyImplantedMD5(config *Config) {
 	fmt.Println("\n--- Verifying Implanted ISO MD5 (checkisomd5 compatible) ---")
 	
+	// Check if we should use external checkisomd5.exe
+	if isCheckisomd5Available() {
+		fmt.Println("Using checkisomd5.exe for verification...")
+		if err := runCheckisomd5(config); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: checkisomd5.exe failed: %v\n", err)
+			fmt.Println("Falling back to internal MD5 verification...")
+			// Fall through to internal implementation
+		} else {
+			// checkisomd5.exe succeeded
+			return
+		}
+	}
+	
+	// Internal implementation (original code)
+	if config.GuiMode {
+		fmt.Println("Reading ISO structure...")
+		fmt.Println("Searching for 'ISO MD5SUM' signature in PVD block...")
+	}
+	
 	result, err := checkImplantedMD5(config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error during MD5 check: %v\n", err)
@@ -540,7 +647,17 @@ func verifyImplantedMD5(config *Config) {
 	
 	if result == nil {
 		fmt.Println("Warning: No 'ISO MD5SUM' signature found.")
+		if config.GuiMode {
+			fmt.Println("\nThis ISO was not created with checkisomd5/implantisomd5.")
+			fmt.Println("SHA256 and content verification are still valid.")
+		}
 		return
+	}
+	
+	if config.GuiMode {
+		fmt.Println("Found implanted MD5 signature!")
+		fmt.Println("Calculating MD5 hash of ISO content...")
+		fmt.Println("(This may take a minute for large ISOs...)")
 	}
 	
 	fmt.Printf("Verification Method: %s\n", result.VerificationMethod)
@@ -549,8 +666,14 @@ func verifyImplantedMD5(config *Config) {
 	
 	if result.IsIntegrityOK {
 		fmt.Println("\n\033[32mSUCCESS: Implanted MD5 is valid.\033[0m")
+		if config.GuiMode {
+			fmt.Println("The ISO has not been modified since the MD5 was implanted.")
+		}
 	} else {
 		fmt.Println("\n\033[31mFAILURE: Implanted MD5 does not match calculated hash.\033[0m")
+		if config.GuiMode {
+			fmt.Println("WARNING: The ISO may have been corrupted or modified!")
+		}
 		hasErrors = true
 	}
 }
