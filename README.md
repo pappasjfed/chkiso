@@ -72,11 +72,34 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 
 ### MD5 Verification in GUI
 
-The GUI includes an optional MD5 checkbox if `checkisomd5.exe` is available:
-- The checkbox only appears if the tool is found in PATH or the same directory as chkiso.exe
-- Check the box to verify implanted MD5 signatures (compatible with checkisomd5 tool)
+The GUI includes an optional MD5 checkbox if the external `checkisomd5` tool is available:
+
+**Windows**: Looks for `checkisomd5.exe`
+**Linux/macOS/FreeBSD**: Looks for `checkisomd5`
+
+The checkbox only appears if the tool is found in:
+1. System PATH
+2. Same directory as chkiso executable
+
+When checked:
+- Runs the external checkisomd5 tool with `-v` (verbose) flag
+- Shows detailed progress and verification output
 - Applies to both drive and ISO file verification
-- Results show in the verification output
+- Falls back to internal implementation if tool fails
+
+**Installing checkisomd5**:
+```bash
+# Fedora/RHEL/CentOS
+sudo dnf install isomd5sum
+
+# Debian/Ubuntu
+sudo apt-get install isomd5sum
+
+# macOS (Homebrew)
+brew install isomd5sum
+
+# Or download and place in same directory as chkiso
+```
 
 ### GUI vs Command Line
 
@@ -200,6 +223,20 @@ chkiso image.iso -md5
 ```
 
 **Advantage**: No FIPS restrictions! Works on all systems regardless of security policies.
+
+**External Tool Support**: If the `checkisomd5` tool is available (on Windows: `checkisomd5.exe`), chkiso will automatically use it with the `-v` (verbose) flag for more detailed output. Otherwise, it uses the internal MD5 implementation.
+
+**Installing checkisomd5** (optional but provides more verbose output):
+```bash
+# Fedora/RHEL/CentOS
+sudo dnf install isomd5sum
+
+# Debian/Ubuntu  
+sudo apt-get install isomd5sum
+
+# macOS (Homebrew)
+brew install isomd5sum
+```
 
 **Note for Windows**: Implanted MD5 check requires direct ISO file access. If you have a mounted ISO (e.g., drive H:), use the original ISO file path instead:
 ```bash
