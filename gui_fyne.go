@@ -71,9 +71,12 @@ func runGUI() {
 	driveSelect := widget.NewSelect(drives, nil)
 	driveSelect.SetSelectedIndex(defaultIndex)
 	
+	// Create result text with monospace font for better readability
 	resultText := widget.NewMultiLineEntry()
 	resultText.Wrapping = fyne.TextWrapWord
 	resultText.Disable() // Read-only
+	// Use monospace font for better output formatting
+	resultText.TextStyle = fyne.TextStyle{Monospace: true}
 	
 	var md5Check *widget.Check
 	if md5Available {
@@ -272,7 +275,7 @@ func captureVerificationOutput(target string, md5Check bool) string {
 		Path:      target,
 		MD5Check:  md5Check,
 		NoVerify:  false,
-		GuiMode:   false,
+		GuiMode:   true, // Enable more verbose output for GUI
 	}
 	
 	// Perform all verification steps

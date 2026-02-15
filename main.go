@@ -624,6 +624,11 @@ func findChecksumFiles(rootPath string) ([]string, error) {
 func verifyImplantedMD5(config *Config) {
 	fmt.Println("\n--- Verifying Implanted ISO MD5 (checkisomd5 compatible) ---")
 	
+	if config.GuiMode {
+		fmt.Println("Reading ISO structure...")
+		fmt.Println("Searching for 'ISO MD5SUM' signature in PVD block...")
+	}
+	
 	result, err := checkImplantedMD5(config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error during MD5 check: %v\n", err)
@@ -633,7 +638,17 @@ func verifyImplantedMD5(config *Config) {
 	
 	if result == nil {
 		fmt.Println("Warning: No 'ISO MD5SUM' signature found.")
+		if config.GuiMode {
+			fmt.Println("\nThis ISO was not created with checkisomd5/implantisomd5.")
+			fmt.Println("SHA256 and content verification are still valid.")
+		}
 		return
+	}
+	
+	if config.GuiMode {
+		fmt.Println("Found implanted MD5 signature!")
+		fmt.Println("Calculating MD5 hash of ISO content...")
+		fmt.Println("(This may take a minute for large ISOs...)")
 	}
 	
 	fmt.Printf("Verification Method: %s\n", result.VerificationMethod)
@@ -642,8 +657,14 @@ func verifyImplantedMD5(config *Config) {
 	
 	if result.IsIntegrityOK {
 		fmt.Println("\n\033[32mSUCCESS: Implanted MD5 is valid.\033[0m")
+		if config.GuiMode {
+			fmt.Println("The ISO has not been modified since the MD5 was implanted.")
+		}
 	} else {
 		fmt.Println("\n\033[31mFAILURE: Implanted MD5 does not match calculated hash.\033[0m")
+		if config.GuiMode {
+			fmt.Println("WARNING: The ISO may have been corrupted or modified!")
+		}
 		hasErrors = true
 	}
 }
