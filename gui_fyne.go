@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -81,8 +80,12 @@ func runGUI() {
 		md5Check = widget.NewCheck("Verify implanted MD5 (checkisomd5)", nil)
 	}
 	
+	// Declare buttons before use in closures
+	var verifyBtn *widget.Button
+	var browseBtn *widget.Button
+	
 	// Verify button
-	verifyBtn := widget.NewButton("Verify Drive", func() {
+	verifyBtn = widget.NewButton("Verify Drive", func() {
 		selectedDrive := driveSelect.Selected
 		if selectedDrive == "<No CD-ROM drives found>" {
 			resultText.SetText("Error: No CD-ROM drives available.\n\nPlease insert a disc or use 'Browse for ISO file...' button.")
@@ -116,7 +119,7 @@ func runGUI() {
 	})
 	
 	// Browse button
-	browseBtn := widget.NewButton("Browse for ISO file...", func() {
+	browseBtn = widget.NewButton("Browse for ISO file...", func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, myWindow)
@@ -241,13 +244,27 @@ func captureVerificationOutput(target string, md5Check bool) string {
 	
 	// Run verification
 	config := Config{
-		IsoPath:   target,
-		Md5Check:  md5Check,
+		Path:      target,
+		MD5Check:  md5Check,
 		NoVerify:  false,
 		GuiMode:   false,
 	}
 	
-	performVerification(config)
+	// Perform all verification steps
+	if err := validatePath(&config); err != nil {
+		fmt.Fprintf(w, "Error: %v\n", err)
+	} else {
+		// Display SHA256 hash
+		displaySha256Hash(&config)
+		
+		// Verify contents
+		verifyContents(&config)
+		
+		// Verify MD5 if requested
+		if md5Check {
+			verifyImplantedMD5(&config)
+		}
+	}
 	
 	// Restore stdout/stderr
 	w.Close()
