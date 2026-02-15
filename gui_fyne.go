@@ -37,6 +37,9 @@ func runGUI() {
 	myApp := app.NewWithID("com.github.pappasjfed.chkiso")
 	myWindow := myApp.NewWindow(fmt.Sprintf("chkiso - ISO/Drive Verification Tool v%s", VERSION))
 	
+	// Set application icon
+	myWindow.SetIcon(GetAppIcon())
+	
 	logDebug("Getting drive letters...")
 	drives := getDriveLetters()
 	logDebug("Found %d CD-ROM drives: %v", len(drives), drives)
