@@ -619,6 +619,20 @@ func findChecksumFiles(rootPath string) ([]string, error) {
 func verifyImplantedMD5(config *Config) {
 	fmt.Println("\n--- Verifying Implanted ISO MD5 (checkisomd5 compatible) ---")
 	
+	// Check if we should use external checkisomd5.exe
+	if isCheckisomd5Available() {
+		fmt.Println("Using checkisomd5.exe for verification...")
+		if err := runCheckisomd5(config); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: checkisomd5.exe failed: %v\n", err)
+			fmt.Println("Falling back to internal MD5 verification...")
+			// Fall through to internal implementation
+		} else {
+			// checkisomd5.exe succeeded
+			return
+		}
+	}
+	
+	// Internal implementation (original code)
 	if config.GuiMode {
 		fmt.Println("Reading ISO structure...")
 		fmt.Println("Searching for 'ISO MD5SUM' signature in PVD block...")
@@ -662,6 +676,52 @@ func verifyImplantedMD5(config *Config) {
 		}
 		hasErrors = true
 	}
+}
+
+// runCheckisomd5 runs the external checkisomd5.exe tool
+func runCheckisomd5(config *Config) error {
+	// Find checkisomd5.exe
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	exeDir := filepath.Dir(exePath)
+	
+	checkisoPath := ""
+	// Try exe directory first
+	localPath := filepath.Join(exeDir, "checkisomd5.exe")
+	if _, err := os.Stat(localPath); err == nil {
+		checkisoPath = localPath
+	} else {
+		// Try PATH
+		if path, err := exec.LookPath("checkisomd5.exe"); err == nil {
+			checkisoPath = path
+		} else {
+			return fmt.Errorf("checkisomd5.exe not found")
+		}
+	}
+	
+	// Run checkisomd5.exe with -v (verbose) flag
+	cmd := exec.Command(checkisoPath, "-v", config.Path)
+	
+	// Capture combined output
+	output, err := cmd.CombinedOutput()
+	
+	// Print the output
+	fmt.Print(string(output))
+	
+	// Check exit code
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			// checkisomd5 returns non-zero on failure
+			if exitErr.ExitCode() != 0 {
+				hasErrors = true
+			}
+		}
+		return err
+	}
+	
+	return nil
 }
 
 type MD5Result struct {
