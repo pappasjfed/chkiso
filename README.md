@@ -30,6 +30,16 @@ A cross-platform tool for validating ISO images and optical media. Written in Go
 
 ### How to Use the GUI
 
+**Latest Improvements (v2.0.0)**:
+- 🎨 Custom gold CD icon
+- 📐 Larger window (800x600) with better layout
+- 🔠 Monospace font for clearer output
+- 📊 Progress indicators during verification
+- 🔒 Prevents concurrent operations
+- 📝 More verbose MD5 verification output
+- 🐛 Fixed double-click detection from Explorer
+- 🎯 Close button moved to bottom for better UX
+
 1. **Launch the GUI:**
    - **Windows AMD64**: Double-click `chkiso-windows-amd64.exe` (automatically launches GUI if no arguments)
    - **Windows ARM64**: Use CLI mode (see Command Line Usage section)
