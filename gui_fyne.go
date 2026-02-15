@@ -33,8 +33,8 @@ func hasConsole() bool {
 func runGUI() {
 	logDebug("runGUI() called (Fyne version)")
 
-	// Create Fyne application
-	myApp := app.New()
+	// Create Fyne application with unique ID
+	myApp := app.NewWithID("com.github.pappasjfed.chkiso")
 	myWindow := myApp.NewWindow(fmt.Sprintf("chkiso - ISO/Drive Verification Tool v%s", VERSION))
 	
 	logDebug("Getting drive letters...")
@@ -98,23 +98,36 @@ func runGUI() {
 		}
 		
 		verifyBtn.Disable()
+		browseBtn.Disable()
 		resultText.SetText("Starting verification...\n")
 		
 		go func() {
 			// Check if drive is ready
 			if !isDriveReady(selectedDrive) {
-				resultText.SetText(fmt.Sprintf("Drive %s is detected but appears to be empty.\n\n"+
-					"Please:\n"+
-					"  • Insert a disc into the drive, or\n"+
-					"  • Use 'Browse for ISO file...' button\n", selectedDrive))
-				verifyBtn.Enable()
+				fyne.Do(func() {
+					resultText.SetText(fmt.Sprintf("Drive %s is detected but appears to be empty.\n\n"+
+						"Please:\n"+
+						"  • Insert a disc into the drive, or\n"+
+						"  • Use 'Browse for ISO file...' button\n", selectedDrive))
+					verifyBtn.Enable()
+					browseBtn.Enable()
+				})
 				return
 			}
 			
+			// Show progress
+			fyne.Do(func() {
+				resultText.SetText(fmt.Sprintf("Verifying drive %s...\n\nStep 1/3: Reading ISO structure...\n", selectedDrive))
+			})
+			
 			// Perform verification
 			output := captureVerificationOutput(selectedDrive, md5CheckEnabled)
-			resultText.SetText(output)
-			verifyBtn.Enable()
+			
+			fyne.Do(func() {
+				resultText.SetText(output)
+				verifyBtn.Enable()
+				browseBtn.Enable()
+			})
 		}()
 	})
 	
@@ -146,13 +159,15 @@ func runGUI() {
 			
 			verifyBtn.Disable()
 			browseBtn.Disable()
-			resultText.SetText(fmt.Sprintf("Verifying: %s\n\nPlease wait...\n", filepath.Base(filePath)))
+			resultText.SetText(fmt.Sprintf("Verifying: %s\n\nStep 1/3: Reading ISO structure...\n", filepath.Base(filePath)))
 			
 			go func() {
 				output := captureVerificationOutput(filePath, md5CheckEnabled)
-				resultText.SetText(output)
-				verifyBtn.Enable()
-				browseBtn.Enable()
+				fyne.Do(func() {
+					resultText.SetText(output)
+					verifyBtn.Enable()
+					browseBtn.Enable()
+				})
 			}()
 		}, myWindow)
 		
@@ -185,23 +200,33 @@ func runGUI() {
 			"or click 'Browse for ISO file...'.")
 	}
 	
-	// Build layout
-	content := container.NewVBox(
-		driveLabel,
-		driveSelect,
-		verifyBtn,
-		browseBtn,
+	// Build layout with better sizing
+	content := container.NewBorder(
+		// Top: controls
+		container.NewVBox(
+			driveLabel,
+			driveSelect,
+			container.NewGridWithColumns(2, verifyBtn, browseBtn),
+			func() fyne.CanvasObject {
+				if md5Check != nil {
+					return md5Check
+				}
+				return widget.NewLabel("") // Empty placeholder
+			}(),
+		),
+		// Bottom: close button
+		container.NewVBox(
+			widget.NewSeparator(),
+			closeBtn,
+		),
+		// Left, Right: nil
+		nil, nil,
+		// Center: results (takes remaining space)
+		container.NewScroll(resultText),
 	)
 	
-	if md5Check != nil {
-		content.Add(md5Check)
-	}
-	
-	content.Add(container.NewScroll(resultText))
-	content.Add(closeBtn)
-	
 	myWindow.SetContent(content)
-	myWindow.Resize(fyne.NewSize(700, 500))
+	myWindow.Resize(fyne.NewSize(800, 600))
 	
 	logDebug("Showing Fyne window...")
 	myWindow.ShowAndRun()
