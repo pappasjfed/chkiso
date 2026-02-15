@@ -110,27 +110,21 @@ func main() {
 	// GUI mode is triggered when:
 	// 1. Running on Windows
 	// 2. No command-line arguments provided (or only the executable name)
-	// 3. No console is attached (double-clicked from Explorer)
-	if runtime.GOOS == "windows" && len(os.Args) == 1 && !hasConsole() {
+	// When double-clicked from Explorer, Windows may create a console briefly,
+	// so we default to GUI mode whenever no arguments are provided on Windows.
+	if runtime.GOOS == "windows" && len(os.Args) == 1 {
 		// Initialize logging for GUI mode
 		initLogger()
 		defer closeLogger()
 		
-		logDebug("GUI mode auto-detected (no console, no args)")
+		logDebug("GUI mode auto-detected (no args on Windows)")
+		logDebug("hasConsole(): %v", hasConsole())
 		
 		runGUI()
 		return
 	}
 	
-	// If we have a console on Windows but no arguments, try to attach to parent console
-	// This makes it work better when run from cmd.exe or PowerShell
-	if runtime.GOOS == "windows" && len(os.Args) == 1 && hasConsole() {
-		// Running from console but no args - show usage
-		printUsage()
-		os.Exit(1)
-	}
-	
-	// CLI mode
+	// CLI mode - we have arguments
 	config := parseFlags()
 	
 	// Validate and resolve the path
